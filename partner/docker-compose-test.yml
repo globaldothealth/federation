@@ -1,0 +1,92 @@
+version: "3.7"
+
+services:
+
+  rabbitmq:
+    image: rabbitmq
+    platform: "${PLATFORM}"
+    command: rabbitmq-server
+    expose:
+      - 5672
+      - 15672
+
+  partner_service:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./
+    depends_on:
+      - rabbitmq
+      - postgres
+    environment:
+      PARTNER_NAME: "${PARTNER_NAME}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AMQP_HOST: rabbitmq
+      COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
+      COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      PATHOGEN_B: "${PATHOGEN_B}"
+      PATHOGEN_C: "${PATHOGEN_C}"
+      DB_HOST: postgres
+      DB_NAME: "${POSTGRES_DB}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
+      JWKS_FILE: "${JWKS_FILE}"
+    expose:
+      - "${GRPC_PORT}"
+
+  test:
+    build:
+      dockerfile: ./Dockerfile-test
+      context: ./
+    environment:
+      PARTNER_NAME: "${PARTNER_NAME}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      PATHOGEN_B: "${PATHOGEN_B}"
+      PATHOGEN_C: "${PATHOGEN_C}"
+      AMQP_HOST: rabbitmq
+      GRPC_HOST: partner_service
+      GRPC_PORT: "${GRPC_PORT}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      COGNITO_USER_POOL_NAME: "${COGNITO_USER_POOL_NAME}"
+      COGNITO_USER_POOL_CLIENT_NAME: "${COGNITO_USER_POOL_CLIENT_NAME}"
+      COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
+      COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+      DB_HOST: postgres
+      DB_NAME: "${POSTGRES_DB}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
+    depends_on:
+      - rabbitmq
+      - postgres
+
+  postgres:
+    image: postgres:15.4-alpine3.18
+    platform: "${PLATFORM}"
+    restart: always
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    expose:
+      - 5432
+
+  localstack:
+    image: localstack/localstack-pro
+    platform: "${PLATFORM}"
+    environment:
+      SERVICES: "${LOCALSTACK_SERVICES}"
+      LOCALSTACK_API_KEY: "${LOCALSTACK_API_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range

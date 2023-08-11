@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+message RtEstimateRequest {
+    string pathogen = 1;
+    string start_date = 2;
+    string end_date = 3;
+    float q_lower = 4;
+    float q_upper = 5;
+    repeated float gt_distribution = 6;
+    repeated float delay_distribution = 7;
+}
+
+message RtEstimate {
+    string date = 1;
+    string cases = 2;
+    string r_mean = 3;
+    string r_var = 4;
+    string q_lower = 5;
+    string q_upper = 6;
+}
+
+message RtEstimateResponse {
+    repeated RtEstimate estimates = 1;
+}
+
+service RtEstimates {
+    rpc GetRtEstimates (RtEstimateRequest) returns (RtEstimateResponse);
+}

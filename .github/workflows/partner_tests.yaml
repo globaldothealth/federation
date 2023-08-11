@@ -1,0 +1,48 @@
+name: Test partner subsystem
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/partner_tests.yml'
+      - 'partner/*'
+  pull_request:
+    paths:
+      - '.github/workflows/partner_tests.yml'
+      - 'partner/*'
+  workflow_dispatch:
+
+env:
+  PLATFORM: ${{ vars.PLATFORM }}
+  LOCALSTACK_URL: ${{ vars.LOCALSTACK_URL }}
+  LOCALSTACK_API_KEY: ${{ secrets.LOCALSTACK_API_KEY }}
+  LOCALSTACK_SERVICES: ${{ secrets.LOCALSTACK_SERVICES }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  PATHOGEN_A: ${{ vars.PATHOGEN_A }}
+  PATHOGEN_B: ${{ vars.PATHOGEN_B }}
+  PATHOGEN_C: ${{ vars.PATHOGEN_C }}
+  COGNITO_USER_POOL_NAME: ${{ secrets.COGNITO_USER_POOL_NAME }}
+  COGNITO_USER_POOL_CLIENT_NAME: ${{ secrets.COGNITO_USER_POOL_CLIENT_NAME }}
+  COGNITO_USER_NAME: ${{ secrets.COGNITO_USER_NAME }}
+  COGNITO_USER_PASSWORD: ${{ secrets.COGNITO_USER_PASSWORD }}
+  PARTNER_NAME: ${{ vars.PARTNER_A_NAME }}
+  GRPC_PORT: ${{ vars.GRPC_A_PORT }}
+  JWKS_FILE: ${{ vars.JWKS_FILE }}
+  POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+  POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+  POSTGRES_PASSWORD: ${{ vars.POSTGRES_PASSWORD }}
+  PARTNER_TABLE_NAME: ${{ vars.PARTNER_TABLE_NAME }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: python3 -m pip install --user grpcio-tools
+
+      - name: Run tests
+        run: ./generate_partner_grpc.sh && cd partner && ./test_partner.sh

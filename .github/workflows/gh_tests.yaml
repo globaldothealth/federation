@@ -1,0 +1,60 @@
+name: Test G.h subsystem
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/gh_tests.yml'
+      - 'gh/*'
+  pull_request:
+    paths:
+      - '.github/workflows/gh_tests.yml'
+      - 'gh/*'
+  workflow_dispatch:
+
+env:
+  PLATFORM: ${{ vars.PLATFORM }}
+  LOCALSTACK_URL: ${{ vars.LOCALSTACK_URL }}
+  LOCALSTACK_API_KEY: ${{ secrets.LOCALSTACK_API_KEY }}
+  LOCALSTACK_SERVICES: ${{ secrets.LOCALSTACK_SERVICES }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  PATHOGEN_A: ${{ vars.PATHOGEN_A }}
+  PATHOGEN_B: ${{ vars.PATHOGEN_B }}
+  PATHOGEN_C: ${{ vars.PATHOGEN_C }}
+  S3_A_BUCKET: ${{ vars.S3_A_BUCKET }}
+  S3_B_BUCKET: ${{ vars.S3_B_BUCKET }}
+  S3_C_BUCKET: ${{ vars.S3_C_BUCKET }}
+  COGNITO_USER_POOL_NAME: ${{ secrets.COGNITO_USER_POOL_NAME }}
+  COGNITO_USER_POOL_CLIENT_NAME: ${{ secrets.COGNITO_USER_POOL_CLIENT_NAME }}
+  COGNITO_USER_NAME: ${{ secrets.COGNITO_USER_NAME }}
+  COGNITO_USER_PASSWORD: ${{ secrets.COGNITO_USER_PASSWORD }}
+  PARTNER_A_NAME: ${{ vars.PARTNER_A_NAME }}
+  PARTNER_B_NAME: ${{ vars.PARTNER_B_NAME }}
+  PARTNER_C_NAME: ${{ vars.PARTNER_C_NAME }}
+  SIM_A_PORT: ${{ vars.SIM_A_PORT }}
+  SIM_B_PORT: ${{ vars.SIM_B_PORT }}
+  SIM_C_PORT: ${{ vars.SIM_C_PORT }}
+  GRPC_A_PORT: ${{ vars.GRPC_A_PORT }}
+  GRPC_B_PORT: ${{ vars.GRPC_B_PORT }}
+  GRPC_C_PORT: ${{ vars.GRPC_C_PORT }}
+  GRAPHQL_PORT: ${{ vars.GRAPHQL_PORT }}
+  GRAPHQL_ENDPOINT: ${{ vars.GRAPHQL_ENDPOINT }}
+  JWKS_FILE: ${{ vars.JWKS_FILE }}
+  PARTNER_TABLE_NAME: ${{ vars.PARTNER_TABLE_NAME }}
+  GH_DB_PORT: ${{ vars.GH_DB_PORT }}
+  GH_DB_NAME: ${{ vars.GH_DB_NAME }}
+  GH_USERS_COLLECTION: ${{ vars.GH_USERS_COLLECTION }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: python3 -m pip install --user grpcio-tools
+
+      - name: Run tests
+        run: ./generate_gh_grpc.sh && cd gh && ./test_gh.sh

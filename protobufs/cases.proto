@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+message CasesRequest {
+    string pathogen = 1;
+}
+
+message Case {
+    int32 id = 1;
+
+    // Case demographics
+    string pathogen = 2;
+    optional string case_status = 3;
+    optional string pathogen_status = 4;
+    optional string location_information = 5;
+    optional string age = 6;
+    optional string sex_at_birth = 7;
+    optional string sex_at_birth_other = 8;
+    optional string gender = 9;
+    optional string gender_other = 10;
+    optional string race = 11;
+    optional string race_other = 12;
+    optional string ethnicity = 13;
+    optional string ethnicity_other = 14;
+    optional string nationality = 15;
+    optional string nationality_other = 16;
+    optional string occupation = 17;
+    optional string healthcare_worker = 18;
+
+    // Medical history
+    optional string previous_infection = 19;
+    optional string co_infection = 20;
+    optional string pre_existing_condition = 21;
+    optional string pregnancy_status = 22;
+    optional string vaccination = 23;
+    optional string vaccine_name = 24;
+    optional string vaccination_date = 25;
+    optional string vaccine_side_effects = 26;
+
+    // Clinical presentation
+    optional string symptoms = 27;
+    optional string date_onset = 28;
+    optional string date_confirmation = 29;
+    optional string confirmation_method = 30;
+    optional string date_of_first_consultation = 31;
+    optional string hospitalized = 32;
+    optional string reason_for_hospitalization = 33;
+    optional string date_hospitalization = 34;
+    optional string date_discharge_hospital = 35;
+    optional string intensive_care = 36;
+    optional string date_admission_icu = 37;
+    optional string date_discharge_icu = 38;
+    optional string home_monitoring = 39;
+    optional string isolated = 40;
+    optional string date_isolation = 41;
+    optional string outcome = 42;
+    optional string date_death = 43;
+    optional string date_recovered = 44;
+
+    // Exposure
+    optional string contact_with_case = 45;
+    optional string contact_id = 46;
+    optional string contact_setting = 47;
+    optional string contact_setting_other = 48;
+    optional string contact_animal = 49;
+    optional string contact_comment = 50;
+    optional string transmission = 51;
+    optional string travel_history = 52;
+    optional string travel_history_entry = 53;
+    optional string travel_history_start = 54;
+    optional string travel_history_location = 55;
+
+    // Laboratory information
+    optional string genomics_metadata = 56;
+    optional string accession_number = 57;
+
+    // Source information
+    optional string source = 58;
+    optional string source_ii = 59;
+    optional string source_iii = 60;
+    optional string source_iv = 61;
+    optional string date_entry = 62;
+    optional string date_last_modified = 63;
+}
+
+message CasesResponse {
+    repeated Case cases = 1;
+}
+
+service Cases {
+    rpc GetCases (CasesRequest) returns (CasesResponse);
+}

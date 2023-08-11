@@ -1,0 +1,28 @@
+name: Test outbreak simulator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sim_tests.yml'
+      - 'outbreak_simulator/*'
+  pull_request:
+    paths:
+      - '.github/workflows/sim_tests.yml'
+      - 'outbreak_simulator/*'
+  workflow_dispatch:
+
+env:
+  POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+  POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+  POSTGRES_PASSWORD: ${{ vars.POSTGRES_PASSWORD }}
+  PARTNER_TABLE_NAME: ${{ vars.PARTNER_TABLE_NAME }}
+  PATHOGEN_A: ${{ vars.PATHOGEN_A }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: cd outbreak_simulator && ./test_sim.sh
