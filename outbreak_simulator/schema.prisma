@@ -1,0 +1,88 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "sync"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model OutbreakCase {
+    id Int @id @default(autoincrement())
+
+    // Case demographics
+    pathogen String
+    case_status String?
+    pathogen_status String?
+    location_information String?
+    age String?
+    sex_at_birth String?
+    sex_at_birth_other String?
+    gender String?
+    gender_other String?
+    race String?
+    race_other String?
+    ethnicity String?
+    ethnicity_other String?
+    nationality String?
+    nationality_other String?
+    occupation String?
+    healthcare_worker String?
+
+    // Medical history
+    previous_infection String?
+    co_infection String?
+    pre_existing_condition String?
+    pregnancy_status String?
+    vaccination String?
+    vaccine_name String?
+    vaccination_date String?
+    vaccine_side_effects String?
+
+    // Clinical presentation
+    symptoms String?
+    date_onset String?
+    date_confirmation String?
+    confirmation_method String?
+    date_of_first_consultation String?
+    hospitalized String?
+    reason_for_hospitalization String?
+    date_hospitalization String?
+    date_discharge_hospital String?
+    intensive_care String?
+    date_admission_icu String?
+    date_discharge_icu String?
+    home_monitoring String?
+    isolated String?
+    date_isolation String?
+    outcome String?
+    date_death String?
+    date_recovered String?
+
+    // Exposure
+    contact_with_case String?
+    contact_id String?
+    contact_setting String?
+    contact_setting_other String?
+    contact_animal String?
+    contact_comment String?
+    transmission String?
+    travel_history String?
+    travel_history_entry String?
+    travel_history_start String?
+    travel_history_location String?
+
+    // Laboratory information
+    genomics_metadata String?
+    accession_number String?
+
+    // Source information
+    source String?
+    source_ii String?
+    source_iii String?
+    source_iv String?
+    date_entry String?
+    date_last_modified String?
+}

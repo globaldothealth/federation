@@ -1,0 +1,36 @@
+name: Partner image -> ECR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'partner/*.py'
+      - 'partner/pyproject.toml'
+      - 'partner/poetry.lock'
+      - 'partner/Dockerfile'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-central-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR (latest)
+      env:
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REPO: turnkey_partner
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd partner && docker build -f ./../Dockerfile -t $REGISTRY/$REPO:latest .
+        docker push $REGISTRY/$REPO:latest

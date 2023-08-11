@@ -1,0 +1,103 @@
+version: "3.7"
+
+services:
+
+  rabbitmq:
+    image: rabbitmq
+    command: rabbitmq-server
+    expose:
+      - 5672
+      - 15672
+
+  grpc_client:
+    build:
+      dockerfile: ./Dockerfile-amqp
+      context: ./
+    depends_on:
+      - rabbitmq
+      - mongo
+      - localstack
+    environment:
+      AMQP_HOST: rabbitmq
+      GRPC_A_HOST: fake_grpc_server
+      GRPC_A_PORT: "${GRPC_A_PORT}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      S3_A_BUCKET: "${S3_A_BUCKET}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      DB_CONNECTION: "mongodb://mongo:${GH_DB_PORT}"
+      DB_NAME: "${GH_DB_NAME}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      GH_A_COLLECTION: "${PATHOGEN_A}"
+      GH_A_RT_COLLECTION: "${PATHOGEN_A}_RT"
+      GH_USERS_COLLECTION: "${GH_USERS_COLLECTION}"
+      COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
+      COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+      PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      PARTNER_B_NAME: "${PARTNER_B_NAME}"
+      PARTNER_C_NAME: "${PARTNER_C_NAME}"
+
+  fake_grpc_server:
+    depends_on:
+      - rabbitmq
+      - localstack
+    build:
+      dockerfile: ./Dockerfile-fake-grpc-service
+      context: ./
+    environment:
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      JWKS_HOST: "${LOCALSTACK_URL}"
+      JWKS_FILE: "${JWKS_FILE}"
+      PATHOGEN: "${PATHOGEN_A}"
+      PARTNER_A_NAME: "${PARTNER_A_NAME}"
+    expose:
+      - "${GRPC_A_PORT}"
+
+  setup:
+    build:
+      dockerfile: ./Dockerfile-setup
+      context: ./
+    environment:
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      JWKS_HOST: "${LOCALSTACK_URL}"
+      JWKS_FILE: "${JWKS_FILE}"
+      PATHOGEN: "${PATHOGEN_A}"
+      PARTNER_A_NAME: "${PARTNER_A_NAME}"
+    depends_on:
+      - rabbitmq
+      - localstack
+
+  localstack:
+    image: localstack/localstack-pro
+    platform: "${PLATFORM}"
+    environment:
+      LOCALSTACK_API_KEY: "${LOCALSTACK_API_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      SERVICES: "${LOCALSTACK_SERVICES}"
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range
+
+  mongo:
+    image: mongo:5.0.14
+    platform: "${PLATFORM}"
+    restart: always
+    init: true
+    ports:
+      - "${GH_DB_PORT}:${GH_DB_PORT}"
+    environment:
+      MONGO_INITDB_DATABASE: "${GH_DB_NAME}"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 150M

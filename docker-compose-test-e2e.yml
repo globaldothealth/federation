@@ -1,0 +1,327 @@
+version: "3.7"
+
+services:
+
+  rabbitmq:
+    image: rabbitmq
+    platform: "${PLATFORM}"
+    command: rabbitmq-server
+    expose:
+      - 5672
+      - 15672
+
+  amqp_server:
+    build:
+      dockerfile: ./Dockerfile-amqp
+      context: ./gh
+      args:
+        DIR: .
+    depends_on:
+      - rabbitmq
+    environment:
+      AMQP_HOST: rabbitmq
+      GRPC_A_HOST: partner_a
+      GRPC_B_HOST: partner_b
+      GRPC_C_HOST: partner_c
+      GRPC_A_PORT: "${GRPC_A_PORT}"
+      GRPC_B_PORT: "${GRPC_B_PORT}"
+      GRPC_C_PORT: "${GRPC_C_PORT}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      S3_A_BUCKET: "${S3_A_BUCKET}"
+      S3_B_BUCKET: "${S3_B_BUCKET}"
+      S3_C_BUCKET: "${S3_C_BUCKET}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      DB_PORT: "${GH_DB_PORT}"
+      DB_CONNECTION: "mongodb://gh_db:${GH_DB_PORT}"
+      DB_NAME: "${GH_DB_NAME}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      PATHOGEN_B: "${PATHOGEN_B}"
+      PATHOGEN_C: "${PATHOGEN_C}"
+      PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      PARTNER_B_NAME: "${PARTNER_B_NAME}"
+      PARTNER_C_NAME: "${PARTNER_C_NAME}"
+      GH_A_COLLECTION: "${PATHOGEN_A}"
+      GH_B_COLLECTION: "${PATHOGEN_B}"
+      GH_C_COLLECTION: "${PATHOGEN_C}"
+      GH_A_RT_COLLECTION: "${PATHOGEN_A}_RT"
+      GH_B_RT_COLLECTION: "${PATHOGEN_B}_RT"
+      GH_C_RT_COLLECTION: "${PATHOGEN_C}_RT"
+      GH_USERS_COLLECTION: "${GH_USERS_COLLECTION}"
+      COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
+      COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+    expose:
+      - 5000
+
+  graphql_server:
+    build:
+      dockerfile: ./Dockerfile-graphql
+      context: ./gh
+      args:
+        DIR: .
+    depends_on:
+      - rabbitmq
+    environment:
+      DB_HOST: gh_db
+      DB_PORT: "${GH_DB_PORT}"
+      DATABASE_NAME: "${GH_DB_NAME}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      PATHOGEN_B: "${PATHOGEN_B}"
+      PATHOGEN_C: "${PATHOGEN_C}"
+      GH_A_COLLECTION: "${PATHOGEN_A}"
+      GH_B_COLLECTION: "${PATHOGEN_B}"
+      GH_C_COLLECTION: "${PATHOGEN_C}"
+      GH_A_RT_COLLECTION: "${PATHOGEN_A}_RT"
+      GH_B_RT_COLLECTION: "${PATHOGEN_B}_RT"
+      GH_C_RT_COLLECTION: "${PATHOGEN_C}_RT"
+      GRAPHQL_PORT: "${GRAPHQL_PORT}"
+      GRAPHQL_ENDPOINT: "${GRAPHQL_ENDPOINT}"
+
+  test:
+    build:
+      dockerfile: ./Dockerfile-test
+      context: ./e2e
+      args:
+        DIR: .
+    depends_on:
+      - amqp_server
+      - graphql_server
+      - partner_a
+      - partner_b
+      - partner_c
+    environment:
+      AMQP_HOST: rabbitmq
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      S3_A_BUCKET: "${S3_A_BUCKET}"
+      S3_B_BUCKET: "${S3_B_BUCKET}"
+      S3_C_BUCKET: "${S3_C_BUCKET}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      COGNITO_USER_POOL_NAME: "${COGNITO_USER_POOL_NAME}"
+      COGNITO_USER_POOL_CLIENT_NAME: "${COGNITO_USER_POOL_CLIENT_NAME}"
+      COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
+      COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+      DB_PORT: "${GH_DB_PORT}"
+      DB_CONNECTION: "mongodb://gh_db:${GH_DB_PORT}"
+      DB_NAME: "${GH_DB_NAME}"
+      GH_CASES_COLLECTION: "${PATHOGEN_A}"
+      GH_RT_COLLECTION: "${PATHOGEN_A}_RT"
+      GH_USERS_COLLECTION: "${GH_USERS_COLLECTION}"
+      PATHOGEN_A: "${PATHOGEN_A}"
+      PATHOGEN_B: "${PATHOGEN_B}"
+      PATHOGEN_C: "${PATHOGEN_C}"
+      GRAPHQL_HOST: graphql_server
+      GRAPHQL_PORT: "${GRAPHQL_PORT}"
+      GRAPHQL_ENDPOINT: "${GRAPHQL_ENDPOINT}"
+      PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      PARTNER_B_NAME: "${PARTNER_B_NAME}"
+      PARTNER_C_NAME: "${PARTNER_C_NAME}"
+      SIM_A_HOST: "sim_a"
+      SIM_A_PORT: "${SIM_A_PORT}"
+      SIM_B_HOST: "sim_b"
+      SIM_B_PORT: "${SIM_B_PORT}"
+      SIM_C_HOST: "sim_c"
+      SIM_C_PORT: "${SIM_C_PORT}"
+      SIM_A_HEALTHCHECK_ENDPOINT: "http://sim_a:${SIM_A_PORT}/health"
+      SIM_B_HEALTHCHECK_ENDPOINT: "http://sim_b:${SIM_B_PORT}/health"
+      SIM_C_HEALTHCHECK_ENDPOINT: "http://sim_c:${SIM_C_PORT}/health"
+      GH_HEALTH_ENDPOINT: "http://amqp_server:5000/health"
+      GH_WORK_REQUEST_URL: "http://amqp_server:5000"
+
+  localstack:
+    image: localstack/localstack-pro
+    platform: "${PLATFORM}"
+    environment:
+      LOCALSTACK_API_KEY: "${LOCALSTACK_API_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      SERVICES: "${LOCALSTACK_SERVICES}"
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range
+
+  gh_db:
+    image: mongo:5.0.14
+    platform: "${PLATFORM}"
+    restart: always
+    init: true
+    ports:
+      - "${GH_DB_PORT}:${GH_DB_PORT}"
+    environment:
+      MONGO_INITDB_DATABASE: "${GH_DB_NAME}"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 150M
+
+  sim_a:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./outbreak_simulator
+      args:
+        DIR: .
+    depends_on:
+      - amqp_server
+      - graphql_server
+      - partner_a
+    environment:
+      PATHOGEN: "${PATHOGEN_A}"
+      SIM_PORT: "${SIM_A_PORT}"
+      DATABASE_URL: "postgresql://user:password@db_a:5432/partner"
+    expose:
+      - "${SIM_A_PORT}"
+
+  sim_b:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./outbreak_simulator
+      args:
+        DIR: .
+    depends_on:
+      - amqp_server
+      - graphql_server
+      - partner_b
+    environment:
+      PATHOGEN: "${PATHOGEN_B}"
+      SIM_PORT: "${SIM_B_PORT}"
+      DATABASE_URL: "postgresql://user:password@db_b:5432/partner"
+    expose:
+      - "${SIM_B_PORT}"
+
+  sim_c:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./outbreak_simulator
+      args:
+        DIR: .
+    depends_on:
+      - amqp_server
+      - graphql_server
+      - partner_c
+    environment:
+      PATHOGEN: "${PATHOGEN_C}"
+      SIM_PORT: "${SIM_C_PORT}"
+      DATABASE_URL: "postgresql://user:password@db_c:5432/partner"
+    expose:
+      - "${SIM_C_PORT}"
+
+  partner_a:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./partner
+      args:
+        DIR: .
+    depends_on:
+      - rabbitmq
+      - amqp_server
+      - graphql_server
+      - db_a
+    environment:
+      AMQP_HOST: "rabbitmq"
+      PATHOGEN: "${PATHOGEN_A}"
+      DB_HOST: "db_a"
+      DB_NAME: "partner"
+      DB_USER: "user"
+      DB_PASSWORD: "password"
+      DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      JWKS_FILE: "${JWKS_FILE}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      PARTNER_NAME: "${PARTNER_A_NAME}"
+    expose:
+      - 50051
+
+  db_a:
+    image: postgres:15.4-alpine3.18
+    platform: "${PLATFORM}"
+    restart: always
+    environment:
+      POSTGRES_DB: "partner"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "password"
+    expose:
+      - 5432
+
+  partner_b:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./partner
+      args:
+        DIR: .
+    depends_on:
+      - rabbitmq
+      - amqp_server
+      - graphql_server
+      - db_b
+    environment:
+      AMQP_HOST: "rabbitmq"
+      PATHOGEN: "${PATHOGEN_B}"
+      DB_HOST: "db_b"
+      DB_NAME: "partner"
+      DB_USER: "user"
+      DB_PASSWORD: "password"
+      DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      JWKS_FILE: "${JWKS_FILE}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      PARTNER_NAME: "${PARTNER_B_NAME}"
+    expose:
+      - 50051
+
+  db_b:
+    image: postgres:15.4-alpine3.18
+    platform: "${PLATFORM}"
+    restart: always
+    environment:
+      POSTGRES_DB: "partner"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "password"
+    expose:
+      - 5432
+
+  partner_c:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./partner
+      args:
+        DIR: .
+    depends_on:
+      - rabbitmq
+      - amqp_server
+      - graphql_server
+      - db_c
+    environment:
+      AMQP_HOST: "rabbitmq"
+      PATHOGEN: "${PATHOGEN_C}"
+      DB_HOST: "db_c"
+      DB_NAME: "partner"
+      DB_USER: "user"
+      DB_PASSWORD: "password"
+      DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
+      LOCALSTACK_URL: "${LOCALSTACK_URL}"
+      JWKS_FILE: "${JWKS_FILE}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      PARTNER_NAME: "${PARTNER_C_NAME}"
+    expose:
+      - 50051
+
+  db_c:
+    image: postgres:15.4-alpine3.18
+    platform: "${PLATFORM}"
+    restart: always
+    environment:
+      POSTGRES_DB: "partner"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "password"
+    expose:
+      - 5432
