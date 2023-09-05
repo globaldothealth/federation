@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "github"
+version = "0.1.0"
+description = ""
+authors = ["jim-sheldon <5619539+jim-sheldon@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.31.0"
+boto3 = "^1.28.19"
+docker = "^6.1.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

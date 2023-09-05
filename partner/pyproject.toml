@@ -23,6 +23,7 @@ cognitojwt = "^1.4.1"
 epyestim = "^0.1"
 numpy = "^1.25.2"
 pandas = "^2.0.3"
+flask = "^2.3.3"
 
 [build-system]
 requires = ["poetry-core"]
