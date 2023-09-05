@@ -35,8 +35,10 @@ services:
       DB_PASSWORD: "${POSTGRES_PASSWORD}"
       DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
       JWKS_FILE: "${JWKS_FILE}"
+      FLASK_PORT: "${FLASK_PORT}"
     expose:
       - "${GRPC_PORT}"
+      - "${FLASK_PORT}"
 
   test:
     build:

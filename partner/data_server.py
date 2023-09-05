@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from concurrent import futures
+from ctypes import c_int
 from datetime import datetime
 import logging
 import multiprocessing
@@ -10,6 +11,8 @@ from typing import Any
 import boto3
 import cognitojwt
 from cryptography.fernet import Fernet
+from flask import Flask
+from flask.views import View
 from google.protobuf.json_format import MessageToDict, ParseDict
 import grpc
 from grpc_interceptor import ServerInterceptor
@@ -38,6 +41,12 @@ from constants import (LOCALSTACK_URL, AWS_REGION, AMQP_HOST, USER_NAME, USER_PA
 # FIXME: non-localstack clients
 COGNITO_CLIENT = boto3.client("cognito-idp", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
 SECRETS_CLIENT = boto3.client("secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
+
+FLASK_HOST = os.environ.get("FLASK_HOST", "0.0.0.0")
+FLASK_PORT = os.environ.get("FLASK_PORT", 5000)
+FLASK_DEBUG = os.environ.get("FLASK_DEBUG", False)
+
+FLASK_APP = Flask(__name__)
 
 
 def setup_logger():
@@ -118,6 +127,64 @@ def get_db_cases(pathogen_name: str) -> list[dict]:
     return results
 
 
+class CountActiveChannelsInterceptor(ServerInterceptor):
+    def __init__(self, num_active_channels):
+        super().__init__()
+        self.num_active_channels = num_active_channels
+
+    def intercept(
+        self,
+        method: Callable,
+        request: Any,
+        context: grpc.ServicerContext,
+        method_name: str,
+    ) -> Any:
+        response = None
+        try:
+            with self.num_active_channels.get_lock():
+                self.num_active_channels.value += 1
+                logging.debug(f"increment num_active_channels: {self.num_active_channels.value}")
+            response = method(request, context)
+            return response
+        except GrpcException as e:
+            context.set_code(e.status_code)
+            context.set_details(e.details)
+            raise
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            raise
+        finally:
+            logging.info("End first interceptor")
+            with self.num_active_channels.get_lock():
+                self.num_active_channels.value -= 1
+                logging.debug(f"decrement num_active_channels: {self.num_active_channels.value}")
+
+
+class JWTValidationInterceptor(ServerInterceptor):
+    def intercept(
+        self,
+        method: Callable,
+        request: Any,
+        context: grpc.ServicerContext,
+        method_name: str,
+    ) -> Any:
+        try:
+            metadata = dict(context.invocation_metadata())
+            validate_jwt(metadata)
+            return method(request, context)
+        except GrpcException as e:
+            logging.exception("gRPC exception during JWT validation")
+            context.set_code(e.status_code)
+            context.set_details(e.details)
+            raise
+        except Exception as e:
+            logging.exception("Something went wrong during JWT validation")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            raise
+
+
 def validate_jwt(metadata: dict) -> None:
     logging.debug("Validating JWT")
     auth_header = metadata.get("authorization")
@@ -144,28 +211,6 @@ def validate_jwt(metadata: dict) -> None:
         details = "JWT validation failed"
         logging.exception(details)
         raise GrpcException(status_code=status_code, details=details)
-
-
-class JWTValidationInterceptor(ServerInterceptor):
-    def intercept(
-        self,
-        method: Callable,
-        request: Any,
-        context: grpc.ServicerContext,
-        method_name: str,
-    ) -> Any:
-        try:
-            metadata = dict(context.invocation_metadata())
-            validate_jwt(metadata)
-            return method(request, context)
-        except GrpcException as e:
-            context.set_code(e.status_code)
-            context.set_details(e.details)
-            raise
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
-            raise
 
 
 def get_encryption_key():
@@ -210,10 +255,11 @@ class CaseDataValidationInterceptor(ServerInterceptor):
             logging.debug("Case data validated")
             return method(request, context)
         except GrpcException as e:
+            logging.exception("gRPC exception during data validation")
             context.set_code(e.status_code)
             context.set_details(e.details)
             raise
-        except Exception as e:
+        except Exception:
             logging.exception("Something went wrong during case data validation")
             raise
 
@@ -246,10 +292,11 @@ class EncryptionInterceptor(ServerInterceptor):
             logging.debug("Response encrypted")
             return response
         except GrpcException as e:
+            logging.exception("gRPC exception during encryption")
             context.set_code(e.status_code)
             context.set_details(e.details)
             raise
-        except Exception as e:
+        except Exception:
             logging.exception("Something went wrong during encryption")
             raise
 
@@ -296,13 +343,27 @@ class RtEstimateService(RtEstimatesServicer):
         return RtEstimateResponse(estimates=rt_estimates)
 
 
-def serve_grpc():
-    logging.info("Configuring gRPC server")
+class StatusView(View):
+    def __init__(self, num_active_channels):
+        self.num_active_channels = num_active_channels
+        self.status = "idle"
 
-    server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=10),
-        interceptors=[EncryptionInterceptor(), CaseDataValidationInterceptor(), JWTValidationInterceptor()]
+    def dispatch_request(self):
+        with self.num_active_channels.get_lock():
+            logging.info(f"status num_active_channels: {self.num_active_channels.value}")
+            self.status = "idle" if self.num_active_channels.value == 0 else "busy"
+        return {"status": self.status}, 200
+
+
+def make_grpc_server(max_workers, interceptors):
+    return grpc.server(
+        futures.ThreadPoolExecutor(max_workers=max_workers),
+        interceptors=interceptors
     )
+
+
+def serve_grpc(server):
+    logging.info("Configuring gRPC server")
 
     add_CasesServicer_to_server(
         CasesService(), server
@@ -316,18 +377,36 @@ def serve_grpc():
     server.wait_for_termination()
 
 
+def run_flask_server():
+    FLASK_APP.run(FLASK_HOST, FLASK_PORT, debug=FLASK_DEBUG)
+
+
 if __name__ == "__main__":
     setup_logger()
     logging.info("Starting client")
+
+    num_active_channels = multiprocessing.Value(c_int, 0)
+    max_workers = 10
+    interceptors = [
+        EncryptionInterceptor(),
+        CaseDataValidationInterceptor(),
+        JWTValidationInterceptor(),
+        CountActiveChannelsInterceptor(num_active_channels)
+    ]
+
     try:
         amqp_a_args = (PATHOGEN_EXCHANGES.get(PATHOGEN_A), PATHOGEN_QUEUES.get(PATHOGEN_A), PATHOGEN_ROUTES.get(PATHOGEN_A),)
         amqp_b_args = (PATHOGEN_EXCHANGES.get(PATHOGEN_B), PATHOGEN_QUEUES.get(PATHOGEN_B), PATHOGEN_ROUTES.get(PATHOGEN_B),)
-        amqp_a_consumer = multiprocessing.Process(target=consume_messages, args=amqp_a_args)
-        amqp_b_consumer = multiprocessing.Process(target=consume_messages, args=amqp_b_args)
-        grpc_server = multiprocessing.Process(target=serve_grpc)
-        amqp_a_consumer.start()
-        amqp_b_consumer.start()
-        grpc_server.start()
+        amqp_a_consumer_process = multiprocessing.Process(target=consume_messages, args=amqp_a_args)
+        amqp_b_consumer_process = multiprocessing.Process(target=consume_messages, args=amqp_b_args)
+        rpc_server = make_grpc_server(max_workers, interceptors)
+        grpc_server_process = multiprocessing.Process(target=serve_grpc, args=(rpc_server,))
+        FLASK_APP.add_url_rule("/status", view_func=StatusView.as_view("status", num_active_channels))
+        flask_server_process = multiprocessing.Process(target=run_flask_server)
+        amqp_a_consumer_process.start()
+        amqp_b_consumer_process.start()
+        grpc_server_process.start()
+        flask_server_process.start()
     except KeyboardInterrupt:
         logging.info("Interrupted")
         try:

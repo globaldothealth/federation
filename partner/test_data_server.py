@@ -8,12 +8,13 @@ import pika
 import pika.exceptions
 import psycopg
 import pytest
+import requests
 
 from cases_pb2 import CasesRequest
 from cases_pb2_grpc import CasesStub
 from rt_estimate_pb2 import RtEstimateRequest
 from rt_estimate_pb2_grpc import RtEstimatesStub
-from data_server import get_client_id, get_jwt, get_encryption_key, SECRETS_CLIENT
+from data_server import get_client_id, get_jwt, get_encryption_key, SECRETS_CLIENT, FLASK_PORT
 from constants import (PATHOGEN_A, PATHOGENS, AMQP_HOST, TOPIC_A_EXCHANGE, TOPIC_A_ROUTE,
 	DB_CONNECTION, PARTNER_NAME, LOCALSTACK_URL, AWS_REGION, USER_NAME, USER_PASSWORD,
 	TABLE_NAME
@@ -239,3 +240,9 @@ def test_schema_violations():
 		_ = get_cases(PATHOGEN_A)
 
 	reset_database()
+
+
+# Used for determining acceptable update time. Busy status timing-sensitive, not yet tested.
+def test_idle_status():
+	response = requests.get(f"http://partner_service:{FLASK_PORT}/status")
+	assert response.json().get("status") == "idle"

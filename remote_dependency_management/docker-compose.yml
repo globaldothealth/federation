@@ -1,0 +1,35 @@
+version: "3.7"
+
+services:
+
+  rabbitmq:
+    image: rabbitmq
+    platform: "${PLATFORM}"
+    command: rabbitmq-server
+    expose:
+      - 5672
+      - 15672
+
+  setup:
+    build:
+      dockerfile: ./Dockerfile-setup
+    depends_on:
+      - localstack
+    environment:
+      LOCALSTACK_URL: "http://localstack:4566"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+
+  localstack:
+    image: localstack/localstack-pro
+    platform: "${PLATFORM}"
+    environment:
+      LOCALSTACK_API_KEY: "${LOCALSTACK_API_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      SERVICES: "${LOCALSTACK_SERVICES}"
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range
