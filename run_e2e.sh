@@ -23,4 +23,4 @@ else
 	exit 1
 fi
 
-docker-compose -f ./docker-compose-e2e.yml --compatibility --verbose up --build --force-recreate --remove-orphans --renew-anon-volumes -d
+docker-compose -f ./docker-compose-e2e.yml --compatibility --verbose up --build --force-recreate --remove-orphans --renew-anon-volumes

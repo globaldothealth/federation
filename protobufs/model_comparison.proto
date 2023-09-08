@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+message ModelComparisonRequest {
+    string information_criterion = 1;
+}
+
+message ModelComparison {
+    string label = 1;
+    string rank = 2;
+    string elpd_loo = 3;
+    string p_loo = 4;
+    string elpd_diff = 5;
+    string weight = 6;
+    string se = 7;
+    string dse = 8;
+    string warning = 9;
+    string scale = 10;
+}
+
+message ModelComparisonResponse {
+    repeated ModelComparison comparisons = 1;
+}
+
+service ModelComparisons {
+    rpc GetModelComparisons (ModelComparisonRequest) returns (ModelComparisonResponse);
+}

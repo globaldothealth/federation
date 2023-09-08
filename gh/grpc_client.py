@@ -5,6 +5,9 @@ import grpc
 from cases_pb2 import CasesRequest, CasesResponse
 from cases_pb2_grpc import CasesStub
 
+from model_comparison_pb2 import ModelComparisonRequest, ModelComparisonResponse
+from model_comparison_pb2_grpc import ModelComparisonsStub
+
 from rt_estimate_pb2 import RtEstimateRequest, RtEstimateResponse
 from rt_estimate_pb2_grpc import RtEstimatesStub
 from constants import Partner, RT_PARAMS
@@ -39,4 +42,15 @@ def get_partner_rt_estimates(pathogen: str, partner: Partner, metadata: list[tup
     )
     response = client.GetRtEstimates(request, metadata=metadata)
     # logging.debug(f"Got estimates {response.estimates}")
+    return response
+
+
+def get_partner_comparisons(pathogen: str, partner: Partner, metadata: list[tuple]) -> ModelComparisonResponse:
+    logging.debug(f"Getting model comparisons from {partner.grpc_host}:{partner.grpc_port}")
+    channel = grpc.insecure_channel(f"{partner.grpc_host}:{partner.grpc_port}")
+    client = ModelComparisonsStub(channel)
+    response = client.GetModelComparisons(
+        ModelComparisonRequest(information_criterion="loo"), metadata=metadata
+    )
+    # logging.debug(f"Got cases {response.cases}")
     return response

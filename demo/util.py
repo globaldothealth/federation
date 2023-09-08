@@ -20,6 +20,7 @@ PARTNER_A_NAME = os.environ.get("PARTNER_A_NAME", "agency_a")
 PATHOGEN_A = os.environ.get("PATHOGEN_A")
 ESTIMATE_RT_JOB = "EstimateRt"
 GET_CASES_JOB = "GetCases"
+MODEL_COMPARISONS_JOB = "CompareModels"
 
 SECRETS_CLIENT = boto3.client("secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
 

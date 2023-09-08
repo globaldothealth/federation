@@ -47,3 +47,7 @@ def clean_estimates_data(estimates_data):
         clean_data.append(clean_estimate)
 
     return clean_data
+
+
+def clean_comparisons_data(comparisons_data):
+    return comparisons_data

@@ -24,6 +24,8 @@ epyestim = "^0.1"
 numpy = "^1.25.2"
 pandas = "^2.0.3"
 flask = "^2.3.3"
+arviz = "^0.16.1"
+pymc = "5.7.2"
 
 [build-system]
 requires = ["poetry-core"]

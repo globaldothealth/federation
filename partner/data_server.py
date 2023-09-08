@@ -26,12 +26,18 @@ from cases_pb2_grpc import (
     add_CasesServicer_to_server,
     CasesServicer
 )
+from model_comparison_pb2 import ModelComparison, ModelComparisonResponse
+from model_comparison_pb2_grpc import (
+    add_ModelComparisonsServicer_to_server,
+    ModelComparisonsServicer
+)
 from rt_estimate_pb2 import RtEstimate, RtEstimateResponse
 from rt_estimate_pb2_grpc import (
     add_RtEstimatesServicer_to_server,
     RtEstimatesServicer
 )
 from run_epyestim import estimate_rt
+from run_model_comparison import get_model_comparisons
 from constants import (LOCALSTACK_URL, AWS_REGION, AMQP_HOST, USER_NAME, USER_PASSWORD,
     JWKS_HOST, JWKS_FILE, DB_CONNECTION, TABLE_NAME, PARTNER_NAME, CASE_FIELDS, FIELD_VALIDATIONS,
     DATE_FIELDS, PATHOGEN_A, PATHOGEN_B, PATHOGEN_EXCHANGES, PATHOGEN_QUEUES, PATHOGEN_ROUTES
@@ -319,6 +325,31 @@ class CasesService(CasesServicer):
         return CasesResponse(cases=cases)
 
 
+class ModelComparisonService(ModelComparisonsServicer):
+
+    def GetModelComparisons(self, request, context):
+        logging.debug(f"Getting model comparisons, using information criteria {request.information_criterion}")
+        mcs = get_model_comparisons(request.information_criterion)
+        logging.info(f"Model comparisons: {mcs}")
+        # logging.info(f"Model comparisons head: {mcs.head()}")
+        model_comparisons = [
+            ModelComparison(
+                label=str(mc["label"]),
+                rank=str(mc["rank"]),
+                elpd_loo=str(mc["elpd_loo"]),  # _waic if information_criterion==waic
+                p_loo=str(mc["p_loo"]),
+                elpd_diff=str(mc["elpd_diff"]),
+                weight=str(mc["weight"]),
+                se=str(mc["se"]),
+                dse=str(mc["dse"]),
+                warning=str(mc["warning"]),
+                scale=str(mc["scale"])
+            )
+            for mc in mcs
+        ]
+        return ModelComparisonResponse(comparisons=model_comparisons)
+
+
 class RtEstimateService(RtEstimatesServicer):
 
     def GetRtEstimates(self, request, context):
@@ -367,6 +398,9 @@ def serve_grpc(server):
 
     add_CasesServicer_to_server(
         CasesService(), server
+    )
+    add_ModelComparisonsServicer_to_server(
+        ModelComparisonService(), server
     )
     add_RtEstimatesServicer_to_server(
         RtEstimateService(), server

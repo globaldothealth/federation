@@ -11,11 +11,11 @@ import pika
 from aws import get_jwt, store_data_in_s3, store_file_in_s3, update_encryption_key
 from db import store_data_in_db, get_curation_data
 from graphics import create_plot
-from grpc_client import get_metadata, get_partner_cases, get_partner_rt_estimates
-from util import setup_logger, cleanup_file, clean_cases_data, clean_estimates_data
+from grpc_client import get_metadata, get_partner_cases, get_partner_rt_estimates, get_partner_comparisons
+from util import setup_logger, cleanup_file, clean_cases_data, clean_estimates_data, clean_comparisons_data
 from constants import (PathogenConfig, Partner, AMQP_CONFIG, PATHOGEN_JOBS, PATHOGEN_DATA_SOURCES,
 	PATHOGENS, PATHOGEN_DATA_DESTINATIONS, GET_CASES_JOB, ESTIMATE_RT_JOB, RT_ESTIMATES_FOLDER,
-	LOCALSTACK_URL, AWS_REGION
+	LOCALSTACK_URL, AWS_REGION, MODEL_COMPARISONS_JOB
 )
 
 
@@ -131,6 +131,18 @@ def run_estimate_rt_job(pathogen_config: PathogenConfig, partner: Partner, metad
 	cleanup_file(file_name)
 
 
+def run_get_model_comparisons_job(pathogen_config: PathogenConfig, partner: Partner, metadata: list[tuple], key: bytes):
+	logging.info("Running get model comparisons job")
+	proto_comparisons = get_partner_comparisons(pathogen_config.name, partner, metadata)
+	dict_comparisons = MessageToDict(proto_comparisons, preserving_proto_field_name=True).get("comparisons")
+	logging.debug(f"Encrypted new comparisons: {dict_comparisons}")
+	decryped_comparisons = decrypt_response(dict_comparisons, key)
+	logging.debug(f"Decrypted new comparisons: {decryped_comparisons}")
+	cleaned_comparisons = clean_comparisons_data(decryped_comparisons)
+	logging.debug(f"Cleaned new comparisons: {cleaned_comparisons}")
+	store_data_in_s3(cleaned_comparisons, pathogen_config.s3_bucket, "model_comparisons.json")
+
+
 def run_jobs(pathogen_name: str, job_name: str):
 	logging.info(f"Running {job_name} for {pathogen_name}")
 	for partner in PATHOGEN_DATA_SOURCES.get(pathogen_name):
@@ -144,6 +156,8 @@ def run_jobs(pathogen_name: str, job_name: str):
 			run_get_cases_job(pathogen_config, partner, metadata, key)
 		elif (job_name == ESTIMATE_RT_JOB):
 			run_estimate_rt_job(pathogen_config, partner, metadata, key)
+		elif (job_name == MODEL_COMPARISONS_JOB):
+			run_get_model_comparisons_job(pathogen_config, partner, metadata, key)
 
 
 @AUTH.verify_password

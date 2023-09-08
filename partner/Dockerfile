@@ -53,4 +53,6 @@ COPY ${DIR}/* ./
 
 RUN poetry install --no-root
 
+# RUN pip install pytensor==2.15
+
 CMD ./run.sh

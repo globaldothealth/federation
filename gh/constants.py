@@ -21,10 +21,12 @@ DIRECT_ROUTE = "gh_direct_route"
 
 ESTIMATE_RT_JOB = "EstimateRt"
 GET_CASES_JOB = "GetCases"
+MODEL_COMPARISONS_JOB = "CompareModels"
 
 PATHOGEN_JOBS = {
     ESTIMATE_RT_JOB: [PATHOGEN_A, PATHOGEN_B, PATHOGEN_C],
     GET_CASES_JOB: [PATHOGEN_A, PATHOGEN_B, PATHOGEN_C],
+    MODEL_COMPARISONS_JOB: [PATHOGEN_A, PATHOGEN_B, PATHOGEN_C]
 }
 
 # This will become a lookup table, each pathogen /w own params
