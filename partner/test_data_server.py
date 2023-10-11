@@ -5,7 +5,7 @@ Partner data server test suite
 import json
 import os
 
-from cryptography.fernet import Fernet
+import boto3
 from google.protobuf.json_format import MessageToDict
 import grpc
 import pika
@@ -18,13 +18,8 @@ from cases_pb2 import CasesRequest
 from cases_pb2_grpc import CasesStub
 from rt_estimate_pb2 import RtEstimateRequest
 from rt_estimate_pb2_grpc import RtEstimatesStub
-from data_server import (
-    get_client_id,
-    get_jwt,
-    get_encryption_key,
-    SECRETS_CLIENT,
-    FLASK_PORT,
-)
+
+from data_server import get_client_id, get_jwt, FLASK_PORT, get_certificate_arn
 from constants import (
     PATHOGEN_A,
     PATHOGENS,
@@ -32,11 +27,8 @@ from constants import (
     TOPIC_A_EXCHANGE,
     TOPIC_A_ROUTE,
     DB_CONNECTION,
-    PARTNER_NAME,
     LOCALSTACK_URL,
     AWS_REGION,
-    USER_NAME,
-    USER_PASSWORD,
     TABLE_NAME,
 )
 
@@ -64,6 +56,28 @@ def get_metadata() -> list:
     client_id = get_client_id()
     token = get_jwt(client_id)
     return [("authorization", f"bearer {token}")]
+
+
+def get_client_credentials() -> grpc.ChannelCredentials:
+    """
+    Get data required to create a secure channel
+
+    Returns:
+        grpc.ChannelCredentials: The client's channel credentials
+    """
+
+    acm_client = boto3.client(
+        "acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+    )
+    response = acm_client.get_certificate(CertificateArn=get_certificate_arn())
+    cert_str = response.get("Certificate")
+    certificate = bytes(cert_str, encoding="utf8")
+    client_id = get_client_id()
+    token = get_jwt(client_id)
+    token_credentials = grpc.access_token_call_credentials(token)
+    channel_credentials = grpc.ssl_channel_credentials(certificate)
+
+    return grpc.composite_channel_credentials(channel_credentials, token_credentials)
 
 
 def insert_case(pathogen_name: str, data: dict) -> None:
@@ -113,31 +127,15 @@ def get_cases(pathogen_name: str) -> list:
     """
 
     try:
-        metadata = get_metadata()
-        channel = grpc.insecure_channel(f"{GRPC_HOST}:{GRPC_PORT}")
+        credentials = get_client_credentials()
+        channel = grpc.secure_channel(f"{GRPC_HOST}:{GRPC_PORT}", credentials)
         client = CasesStub(channel)
-        response = client.GetCases(
-            CasesRequest(pathogen=pathogen_name), metadata=metadata
-        )
+        response = client.GetCases(CasesRequest(pathogen=pathogen_name))
     except Exception as exc:
         print(f"Could not make gRPC request: {exc}")
         raise
 
-    actual_encrypted = MessageToDict(response, preserving_proto_field_name=True).get(
-        "cases"
-    )
-
-    key = get_encryption_key()
-    fernet = Fernet(key)
-
-    actual = []
-    for case in actual_encrypted:
-        decrypted_case = {}
-        for k, v in case.items():
-            decrypted_case[k] = fernet.decrypt(v.encode()).decode()
-        actual.append(decrypted_case)
-
-    return actual
+    return MessageToDict(response, preserving_proto_field_name=True).get("cases")
 
 
 def reset_database() -> None:
@@ -240,8 +238,8 @@ def test_client_estimates_rt():
     # FIXME: asynchronous call/response
 
     try:
-        metadata = get_metadata()
-        channel = grpc.insecure_channel(f"{GRPC_HOST}:{GRPC_PORT}")
+        credentials = get_client_credentials()
+        channel = grpc.secure_channel(f"{GRPC_HOST}:{GRPC_PORT}", credentials)
         client = RtEstimatesStub(channel)
         request = RtEstimateRequest(
             start_date=start_date,
@@ -252,7 +250,7 @@ def test_client_estimates_rt():
             delay_distribution=delay_distribution,
             pathogen=PATHOGEN_A,
         )
-        response = client.GetRtEstimates(request, metadata=metadata)
+        response = client.GetRtEstimates(request)
     except Exception:
         pytest.fail("Could not make gRPC request")
 
@@ -261,29 +259,6 @@ def test_client_estimates_rt():
     )
 
     assert rt_estimate
-
-    reset_database()
-
-
-def test_key_updates():
-    """
-    The encryption key should update after a request
-    """
-
-    old_key = get_encryption_key()
-    new_key = Fernet.generate_key()
-    SECRETS_CLIENT.put_secret_value(SecretId=PARTNER_NAME, SecretBinary=new_key)
-
-    expected = [TEST_CASE]
-    insert_case(PATHOGEN_A, expected[0])
-
-    actual = get_cases(PATHOGEN_A)
-
-    key = get_encryption_key()
-
-    assert expected == actual
-    assert key != old_key
-    assert key == new_key
 
     reset_database()
 

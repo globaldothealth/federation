@@ -10,8 +10,7 @@ from typing import Any
 
 import boto3
 import cognitojwt
-from cryptography.fernet import Fernet
-from google.protobuf.json_format import MessageToDict, ParseDict
+from cryptography.hazmat.primitives import serialization
 import grpc
 from grpc_interceptor import ServerInterceptor
 from grpc_interceptor.exceptions import GrpcException
@@ -20,7 +19,7 @@ from cases_pb2 import Case, CasesRequest, CasesResponse
 from cases_pb2_grpc import add_CasesServicer_to_server, CasesServicer
 from rt_estimate_pb2 import RtEstimate, RtEstimateRequest, RtEstimateResponse
 from rt_estimate_pb2_grpc import add_RtEstimatesServicer_to_server, RtEstimatesServicer
-from constants import LOCALSTACK_URL, AWS_REGION, PATHOGEN_A, PARTNER_A_NAME
+from constants import LOCALSTACK_URL, AWS_REGION, PATHOGEN_A
 from util import setup_logger
 
 
@@ -30,9 +29,47 @@ COGNITO_CLIENT = boto3.client(
 SECRETS_CLIENT = boto3.client(
     "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
 )
+ACM_CLIENT = boto3.client("acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
+
+CERT_DOMAIN_NAME = os.environ.get("ACM_CERT_DOMAIN_NAME", "fake_grpc_server")
+DECRYPTION_PASSPHRASE = os.environ.get("DECRYPTION_PASSPHRASE", "foobar")
 
 JWKS_HOST = os.environ.get("JWKS_HOST")
 JWKS_FILE = os.environ.get("JWKS_FILE")
+
+
+def get_server_credentials(certificate_arn: str):
+    logging.info("Getting server credentials")
+    passphrase = bytes(DECRYPTION_PASSPHRASE, encoding="utf8")
+    response = ACM_CLIENT.export_certificate(
+        CertificateArn=certificate_arn, Passphrase=passphrase
+    )
+
+    # Not the chain gRPC wants, but this works.
+    # See https://groups.google.com/g/grpc-io/c/pJnoc_MHkfc?pli=1
+    certificate = bytes(response.get("Certificate"), encoding="utf8")
+    encrypted_private_key = bytes(response.get("PrivateKey"), encoding="utf8")
+
+    pem_private_key = serialization.load_pem_private_key(
+        encrypted_private_key, passphrase
+    )
+    private_key = pem_private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    return grpc.ssl_server_credentials(((private_key, certificate),))
+
+
+def get_certificate_arn() -> str:
+    logging.info("Getting certs from AWS")
+    response = ACM_CLIENT.list_certificates()
+    certificates_list = response.get("CertificateSummaryList", [])
+    for certificate in certificates_list:
+        if certificate.get("DomainName") == CERT_DOMAIN_NAME:
+            return certificate.get("CertificateArn")
+    raise Exception(f"No certificate found for {CERT_DOMAIN_NAME}")
 
 
 class CasesService(CasesServicer):
@@ -171,63 +208,6 @@ class JWTValidationInterceptor(ServerInterceptor):
             raise
 
 
-def get_encryption_key() -> bytes:
-    """
-    Get the encryption key
-
-    Returns:
-        bytes: The encryption key
-    """
-
-    response = SECRETS_CLIENT.get_secret_value(SecretId=PARTNER_A_NAME)
-    return response.get("SecretBinary", b"")
-
-
-class EncryptionInterceptor(ServerInterceptor):
-
-    """
-    Interceptor for data encryption
-    """
-
-    def intercept(
-        self,
-        method: Callable,
-        request: Any,
-        context: grpc.ServicerContext,
-        method_name: str,
-    ) -> Any:
-        """
-        Intercept the request and encrypt data
-
-        Args:
-            method (Callable): The RPC method
-            request (Any): The gRPC request
-            context (grpc.ServicerContext): The context
-            method_name (str): The name of the gRPC method
-        """
-
-        try:
-            response = method(request, context)
-            response_type = type(response)
-
-            key = get_encryption_key()
-            fernet = Fernet(key)
-
-            dict_response = MessageToDict(response)
-
-            for _, data in dict_response.items():
-                for elem in data:
-                    for k, v in elem.items():
-                        elem[k] = fernet.encrypt(str(v).encode()).decode()
-
-            response = ParseDict(dict_response, response_type())
-            return response
-        except GrpcException as e:
-            context.set_code(e.status_code)
-            context.set_details(e.details)
-            raise
-
-
 def serve():
     """
     Serve gRPC
@@ -235,14 +215,18 @@ def serve():
 
     setup_logger()
     logging.info("Configuring gRPC server")
+    certificate_arn = get_certificate_arn()
+    server_credentials = get_server_credentials(certificate_arn)
+
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
-        interceptors=[EncryptionInterceptor(), JWTValidationInterceptor()],
+        interceptors=[JWTValidationInterceptor()],
     )
 
     add_CasesServicer_to_server(CasesService(), server)
     add_RtEstimatesServicer_to_server(RtEstimateService(), server)
-    server.add_insecure_port("[::]:50051")
+
+    server.add_secure_port("[::]:50051", server_credentials)
     logging.info("Starting gRPC server")
     server.start()
     server.wait_for_termination()

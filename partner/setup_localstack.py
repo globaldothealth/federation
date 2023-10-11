@@ -8,7 +8,6 @@ import sys
 from time import sleep
 
 import boto3
-from cryptography.fernet import Fernet
 import requests
 
 
@@ -21,6 +20,7 @@ COGNITO_CLIENT = boto3.client(
 SECRETS_CLIENT = boto3.client(
     "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
 )
+ACM_CLIENT = boto3.client("acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
 
 USER_POOL_NAME = os.environ.get("COGNITO_USER_POOL_NAME")
 USER_POOL_CLIENT_NAME = os.environ.get("COGNITO_USER_POOL_CLIENT_NAME")
@@ -29,6 +29,8 @@ USER_NAME = os.environ.get("COGNITO_USER_NAME")
 USER_PASSWORD = os.environ.get("COGNITO_USER_PASSWORD")
 
 PARTNER_NAME = os.environ.get("PARTNER_NAME")
+
+CERT_DOMAIN_NAME = os.environ.get("ACM_CERT_DOMAIN_NAME")
 
 
 def setup_logger() -> None:
@@ -47,7 +49,7 @@ def wait_for_localstack() -> None:
     Wait for localstack services to be ready
 
     Raises:
-            Exception: If localstack services are not available in the expected time
+        Exception: If localstack services are not available in the expected time
     """
 
     logging.info("Waiting for localstack")
@@ -56,10 +58,12 @@ def wait_for_localstack() -> None:
     while counter < 42:
         try:
             response = requests.get(healthcheck_url)
+            acm_status = response.json().get("services", {}).get("acm")
             cognito_status = response.json().get("services", {}).get("cognito-idp")
-            if cognito_status == "running":
+            if acm_status == "running" and cognito_status == "running":
                 return
             # Lazy loading
+            _ = ACM_CLIENT.list_certificates()
             _ = COGNITO_CLIENT.list_user_pools(MaxResults=1)
         except requests.exceptions.ConnectionError:
             pass
@@ -97,10 +101,6 @@ def setup_secrets_manager() -> None:
     Setup AWS Secrets Manager resources
     """
 
-    logging.info(f"Creating secret: {PARTNER_NAME}")
-    key = Fernet.generate_key()
-    _ = SECRETS_CLIENT.create_secret(Name=PARTNER_NAME, SecretBinary=key)
-    logging.info("Created secret")
     logging.info(f"Creating secret: {PARTNER_NAME}_api_key")
     response = SECRETS_CLIENT.get_random_password(ExcludePunctuation=True)
     password = response.get("RandomPassword")
@@ -110,8 +110,19 @@ def setup_secrets_manager() -> None:
     logging.info("Created secret")
 
 
+def setup_acm() -> None:
+    """
+    Setup AWS ACM resources
+    """
+
+    logging.info("Creating AWS ACM certificate")
+    _ = ACM_CLIENT.request_certificate(DomainName=CERT_DOMAIN_NAME)
+    logging.info(f"Created certificate for domain {CERT_DOMAIN_NAME}")
+
+
 if __name__ == "__main__":
     setup_logger()
     wait_for_localstack()
+    setup_acm()
     setup_cognito()
     setup_secrets_manager()

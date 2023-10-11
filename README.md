@@ -10,7 +10,7 @@ Below is a diagram of the federated system architecture and the data life-cycle.
 
 ![Federated system architecture and data life-cycle](./e2e.png)
 
-Below is a diagram of gRPC interceptors, used to secure and encrypt communications and ensure low risk for re-identification. Global.health sends a JSON Web Token (JWT) to a partner, which validates it before processing the request. When partners send responses, they may perform any desired checks for anonymity and adherence to laws and ethics, then they encrypt the response. Global.health decrypts the response, performs its own ethical and legal checks, and then accepts the response and processes the data payload.
+Below is a diagram of gRPC interceptors. Global.health sends a JSON Web Token (JWT) to a partner, which validates it before processing the request. When partners send responses, they may perform any desired checks for anonymity and adherence to laws and ethics, then they encrypt the response. Global.health decrypts the response, performs its own ethical and legal checks, and then accepts the response and processes the data payload.
 
 ![gRPC interceptors](./interceptors.png)
 
@@ -18,7 +18,7 @@ Below is a diagram of the request-response lifecycle. Before each request, Globa
 
 ![Request-response lifecycle](./request_response.png)
 
-While gRPC supports TLS, this system should provide the lowest possible barrier to setup and use; its creators opted for a custom security and encryption design, instead of requiring partners to manage DNS.
+TEXT ABOUT TLS + NETWORKING HERE
 
 This system supports both x86 and arm64 machines. Users need Docker, docker-compose, and populated `.env` files. If running demo scripts, users will also need Python.
 

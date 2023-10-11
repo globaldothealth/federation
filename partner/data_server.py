@@ -14,10 +14,10 @@ from typing import Any
 
 import boto3
 import cognitojwt
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization
 from flask import Flask
 from flask.views import View
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import MessageToDict
 import grpc
 from grpc_interceptor import ServerInterceptor
 from grpc_interceptor.exceptions import GrpcException
@@ -59,6 +59,11 @@ COGNITO_CLIENT = boto3.client(
 SECRETS_CLIENT = boto3.client(
     "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
 )
+ACM_CLIENT = boto3.client("acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
+
+CERT_DOMAIN_NAME = os.environ.get("ACM_CERT_DOMAIN_NAME")
+
+DECRYPTION_PASSPHRASE = os.environ.get("DECRYPTION_PASSPHRASE", "foobar")
 
 FLASK_HOST = os.environ.get("FLASK_HOST", "0.0.0.0")
 FLASK_PORT = os.environ.get("FLASK_PORT", 5000)
@@ -104,6 +109,14 @@ def consume_messages(topic_exchange: str, topic_queue: str, topic_route: str):
     )
 
     def callback(ch, method, properties, body):
+        """Summary
+
+        Args:
+            ch (TYPE): Description
+            method (TYPE): Description
+            properties (TYPE): Description
+            body (TYPE): Description
+        """
         logging.info(" [x] Received %r" % body)
 
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
@@ -119,6 +132,7 @@ def get_client_id() -> str:
     Returns:
         str: The client ID
     """
+
     response = COGNITO_CLIENT.list_user_pools(MaxResults=1)
     pool_id = response.get("UserPools", [])[0].get("Id")
 
@@ -138,6 +152,7 @@ def get_jwt(client_id: str) -> str:
     Returns:
         str: The JWT
     """
+
     response = COGNITO_CLIENT.initiate_auth(
         AuthFlow="USER_PASSWORD_AUTH",
         AuthParameters={"USERNAME": USER_NAME, "PASSWORD": USER_PASSWORD},
@@ -158,6 +173,7 @@ def get_db_cases(pathogen_name: str) -> list[dict]:
     Returns:
         list[dict]: Case data
     """
+
     logging.debug(f"Getting cases from database for pathogen: {pathogen_name}")
     results = []
     try:
@@ -213,6 +229,7 @@ class CountActiveChannelsInterceptor(ServerInterceptor):
             context (grpc.ServicerContext): The context
             method_name (str): The name of the gRPC method
         """
+
         response = None
         try:
             with self.num_active_channels.get_lock():
@@ -314,18 +331,6 @@ def validate_jwt(metadata: dict) -> None:
         raise GrpcException(status_code=status_code, details=details)
 
 
-def get_encryption_key() -> bytes:
-    """
-    Get the encryption key
-
-    Returns:
-        bytes: The encryption key
-    """
-
-    response = SECRETS_CLIENT.get_secret_value(SecretId=PARTNER_NAME)
-    return response.get("SecretBinary", b"")
-
-
 class CaseDataValidationInterceptor(ServerInterceptor):
 
     """
@@ -386,57 +391,6 @@ class CaseDataValidationInterceptor(ServerInterceptor):
             raise
         except Exception:
             logging.exception("Something went wrong during case data validation")
-            raise
-
-
-# The result of not using TLS
-class EncryptionInterceptor(ServerInterceptor):
-
-    """
-    Interceptor for encrypting data
-    """
-
-    def intercept(
-        self,
-        method: Callable,
-        request: Any,
-        context: grpc.ServicerContext,
-        method_name: str,
-    ) -> Any:
-        """
-        Encrypt data
-
-        Args:
-            method (Callable): The RPC method
-            request (Any): The gRPC request
-            context (grpc.ServicerContext): The context
-            method_name (str): The name of the gRPC method
-        """
-        try:
-            logging.debug("Encrypting response")
-            response = method(request, context)
-
-            key = get_encryption_key()
-            fernet = Fernet(key)
-
-            dict_response = MessageToDict(response)
-
-            for _, data in dict_response.items():
-                for elem in data:
-                    for k, v in elem.items():
-                        elem[k] = fernet.encrypt(str(v).encode()).decode()
-
-            response_type = type(response)
-            response = ParseDict(dict_response, response_type())
-            logging.debug("Response encrypted")
-            return response
-        except GrpcException as e:
-            logging.exception("gRPC exception during encryption")
-            context.set_code(e.status_code)
-            context.set_details(e.details)
-            raise
-        except Exception:
-            logging.exception("Something went wrong during encryption")
             raise
 
 
@@ -537,7 +491,7 @@ class StatusView(View):
         Get the gRPC status based on the number of active channels
 
         Returns:
-            tuple: Message + HTTP status code
+            tuple[str, int]: Message + HTTP status code
         """
 
         with self.num_active_channels.get_lock():
@@ -565,29 +519,103 @@ def make_grpc_server(max_workers: int, interceptors: list) -> grpc.Server:
     )
 
 
-def serve_grpc(server: grpc.Server):
+def serve_grpc(server: grpc.Server, server_credentials) -> None:
     """
     Start and run the gRPC server
 
     Args:
         server (grpc.Server): The gRPC server
+        server_credentials (TYPE): Description
     """
+
     logging.info("Configuring gRPC server")
 
     add_CasesServicer_to_server(CasesService(), server)
+    logging.debug("Added cases service")
     add_RtEstimatesServicer_to_server(RtEstimateService(), server)
-    server.add_insecure_port("[::]:50051")
-    server.start()
+    logging.debug("Added R(t) estimation service")
+    try:
+        server.add_secure_port("[::]:50051", server_credentials)
+        logging.debug("Starting gRPC server")
+        server.start()
+    except Exception:
+        logging.exception("Something went wrong starting the gRPC server")
+        raise
+
     logging.info("Serving gRPC")
     server.wait_for_termination()
 
 
-def run_flask_server():
+def run_flask_server() -> None:
     """
     Run a Flask server (used for sharing idle/busy state)
     """
 
+    logging.info("Serving HTTP")
     FLASK_APP.run(FLASK_HOST, FLASK_PORT, debug=FLASK_DEBUG)
+
+
+def get_server_certificate_configuration() -> grpc.ServerCertificateConfiguration:
+    """
+    Get the gRPC server certificate configuration
+
+    Returns:
+        grpc.ServerCertificateConfiguration: An encapsulation of the data required to open a secure port on a Server
+    """
+
+    logging.info("Getting server certificate configuration")
+    certificate_arn = get_certificate_arn()
+    passphrase = bytes(DECRYPTION_PASSPHRASE, encoding="utf8")
+    response = ACM_CLIENT.export_certificate(
+        CertificateArn=certificate_arn, Passphrase=passphrase
+    )
+
+    certificate = bytes(response.get("Certificate"), encoding="utf8")
+    encrypted_private_key = bytes(response.get("PrivateKey"), encoding="utf8")
+
+    pem_private_key = serialization.load_pem_private_key(
+        encrypted_private_key, passphrase
+    )
+    private_key = pem_private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    return grpc.ssl_server_certificate_configuration(((private_key, certificate),))
+
+
+def get_server_credentials(
+    server_config: grpc.ServerCertificateConfiguration,
+) -> grpc.ServerCredentials:
+    """
+    Get the gRPC server credentials
+
+    Args:
+        server_config (grpc.ServerCertificateConfiguration): An encapsulation of the data required to open a secure port on a Server
+
+    Returns:
+        grpc.ServerCredentials: The certificate configuration for use with an SSL-enabled Server
+    """
+    logging.info("Getting server credentials")
+    return grpc.dynamic_ssl_server_credentials(
+        server_config, get_server_certificate_configuration
+    )
+
+
+def get_certificate_arn() -> str:
+    """
+    Get the ARN of the server SSL/TLS certificate
+
+    Returns:
+        str: The certificate ARN
+    """
+    logging.info("Getting certs from AWS")
+    response = ACM_CLIENT.list_certificates()
+    certificates_list = response.get("CertificateSummaryList", [])
+    for certificate in certificates_list:
+        if certificate.get("DomainName") == CERT_DOMAIN_NAME:
+            return certificate.get("CertificateArn", "")
 
 
 if __name__ == "__main__":
@@ -597,7 +625,6 @@ if __name__ == "__main__":
     num_active_channels = multiprocessing.Value(c_int, 0)
     max_workers = 10
     interceptors = [
-        EncryptionInterceptor(),
         CaseDataValidationInterceptor(),
         JWTValidationInterceptor(),
         CountActiveChannelsInterceptor(num_active_channels),
@@ -621,12 +648,20 @@ if __name__ == "__main__":
             target=consume_messages, args=amqp_b_args
         )
         rpc_server = make_grpc_server(max_workers, interceptors)
+
+        server_config = get_server_certificate_configuration()
+        server_credentials = get_server_credentials(server_config)
         grpc_server_process = multiprocessing.Process(
-            target=serve_grpc, args=(rpc_server,)
+            target=serve_grpc,
+            args=(
+                rpc_server,
+                server_credentials,
+            ),
         )
         FLASK_APP.add_url_rule(
             "/status", view_func=StatusView.as_view("status", num_active_channels)
         )
+
         flask_server_process = multiprocessing.Process(target=run_flask_server)
         amqp_a_consumer_process.start()
         amqp_b_consumer_process.start()

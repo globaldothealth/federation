@@ -14,6 +14,15 @@ from rt_estimate_pb2_grpc import RtEstimatesStub
 from constants import Partner, RT_PARAMS
 
 
+def get_credentials(token: str, certificate: bytes) -> grpc.ChannelCredentials:
+    token_credentials = grpc.access_token_call_credentials(token)
+    channel_credentials = grpc.ssl_channel_credentials(certificate)
+    credentials = grpc.composite_channel_credentials(
+        channel_credentials, token_credentials
+    )
+    return credentials
+
+
 def get_metadata(token: str) -> list[tuple]:
     """
     Create request metadata
@@ -29,7 +38,7 @@ def get_metadata(token: str) -> list[tuple]:
 
 
 def get_partner_cases(
-    pathogen: str, partner: Partner, metadata: list[tuple]
+    pathogen: str, partner: Partner, credentials: grpc.ChannelCredentials
 ) -> CasesResponse:
     """
     Get case data from a partner
@@ -37,23 +46,25 @@ def get_partner_cases(
     Args:
         pathogen (str): Name of the pathogen
         partner (Partner): Partner configuration
-        metadata (list[tuple]): request metadata
+        credentials (grpc.ChannelCredentials): gRPC channel credentials
 
     Returns:
         CasesResponse: Response with case data
     """
+
     logging.debug(
         f"Getting {pathogen} cases from {partner.grpc_host}:{partner.grpc_port}"
     )
-    channel = grpc.insecure_channel(f"{partner.grpc_host}:{partner.grpc_port}")
+    channel = grpc.secure_channel(
+        f"{partner.grpc_host}:{partner.grpc_port}", credentials
+    )
     client = CasesStub(channel)
-    response = client.GetCases(CasesRequest(pathogen=pathogen), metadata=metadata)
-    # logging.debug(f"Got cases {response.cases}")
+    response = client.GetCases(CasesRequest(pathogen=pathogen))
     return response
 
 
 def get_partner_rt_estimates(
-    pathogen: str, partner: Partner, metadata: list[tuple]
+    pathogen: str, partner: Partner, credentials: grpc.ChannelCredentials
 ) -> RtEstimateResponse:
     """
     Get R(t) estimate data from a partner
@@ -61,15 +72,18 @@ def get_partner_rt_estimates(
     Args:
         pathogen (str): Name of the pathogen
         partner (Partner): Partner configuration
-        metadata (list[tuple]): request metadata
+        credentials (grpc.ChannelCredentials): gRPC channel credentials
 
     Returns:
         RtEstimateResponse: Response with R(t) estimate data
     """
+
     logging.debug(
         f"Getting {pathogen} R(t) estimates from {partner.grpc_host}:{partner.grpc_port}"
     )
-    channel = grpc.insecure_channel(f"{partner.grpc_host}:{partner.grpc_port}")
+    channel = grpc.secure_channel(
+        f"{partner.grpc_host}:{partner.grpc_port}", credentials
+    )
     client = RtEstimatesStub(channel)
     request = RtEstimateRequest(
         pathogen=pathogen,
@@ -80,6 +94,5 @@ def get_partner_rt_estimates(
         gt_distribution=RT_PARAMS.get("gt_distribution"),
         delay_distribution=RT_PARAMS.get("delay_distribution"),
     )
-    response = client.GetRtEstimates(request, metadata=metadata)
-    # logging.debug(f"Got estimates {response.estimates}")
+    response = client.GetRtEstimates(request)
     return response

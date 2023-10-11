@@ -8,7 +8,6 @@ import sys
 from time import sleep
 
 import boto3
-from cryptography.fernet import Fernet
 import requests
 
 
@@ -16,6 +15,8 @@ LOCALSTACK_URL = os.environ.get("LOCALSTACK_URL")
 S3_A_BUCKET = os.environ.get("S3_A_BUCKET")
 S3_B_BUCKET = os.environ.get("S3_B_BUCKET")
 S3_C_BUCKET = os.environ.get("S3_C_BUCKET")
+
+CERT_DOMAIN_NAME = os.environ.get("ACM_CERT_DOMAIN_NAME", "fake_grpc_server")
 
 USER_POOL_NAME = os.environ.get("COGNITO_USER_POOL_NAME")
 USER_POOL_CLIENT_NAME = os.environ.get("COGNITO_USER_POOL_CLIENT_NAME")
@@ -32,6 +33,7 @@ COGNITO_CLIENT = boto3.client(
 SECRETS_CLIENT = boto3.client(
     "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
 )
+ACM_CLIENT = boto3.client("acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
 
 PARTNER_A_NAME = os.environ.get("PARTNER_A_NAME")
 PARTNER_B_NAME = os.environ.get("PARTNER_B_NAME")
@@ -65,10 +67,12 @@ def wait_for_localstack() -> None:
     while counter < 42:
         try:
             response = requests.get(healthcheck_url)
+            acm_status = response.json().get("services", {}).get("acm")
             cognito_status = response.json().get("services", {}).get("cognito-idp")
-            if cognito_status == "running":
+            if acm_status == "running" and cognito_status == "running":
                 return
             # Lazy loading
+            _ = ACM_CLIENT.list_certificates()
             _ = COGNITO_CLIENT.list_user_pools(MaxResults=1)
         except requests.exceptions.ConnectionError:
             pass
@@ -95,6 +99,16 @@ def create_bucket(bucket_name: str) -> None:
     S3_CLIENT.create_bucket(
         Bucket=bucket_name, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
     )
+
+
+def setup_acm() -> None:
+    """
+    Setup AWS ACM resources
+    """
+
+    logging.info("Creating AWS ACM certificate")
+    _ = ACM_CLIENT.request_certificate(DomainName=CERT_DOMAIN_NAME)
+    logging.info(f"Created certificate for domain {CERT_DOMAIN_NAME}")
 
 
 def setup_cognito() -> None:
@@ -127,10 +141,6 @@ def setup_secrets_manager() -> None:
     """
 
     for name in PARTNER_NAMES:
-        logging.info(f"Creating secret: {name}")
-        key = Fernet.generate_key()
-        _ = SECRETS_CLIENT.create_secret(Name=name, SecretBinary=key)
-        logging.info("Created secret")
         logging.info(f"Creating secret: {name}_api_key_password")
         response = SECRETS_CLIENT.get_random_password(ExcludePunctuation=True)
         password = response.get("RandomPassword")
@@ -148,4 +158,5 @@ if __name__ == "__main__":
     create_bucket(S3_B_BUCKET)
     create_bucket(S3_C_BUCKET)
     setup_cognito()
+    setup_acm()
     setup_secrets_manager()

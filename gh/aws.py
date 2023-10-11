@@ -15,41 +15,6 @@ from constants import (
 )
 
 
-def get_encryption_key(partner_name: str) -> bytes:
-    """
-    Get the encryption key for a given partner
-
-    Args:
-        partner_name (str): The partner name
-
-    Returns:
-        bytes: The encryption key
-    """
-
-    logging.debug(f"Getting encryption key for partner {partner_name}")
-    secrets_client = boto3.client(
-        "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
-    )
-    response = secrets_client.get_secret_value(SecretId=partner_name)
-    return response.get("SecretBinary", b"")
-
-
-def update_encryption_key(partner_name: str, key: bytes) -> None:
-    """
-    Update the encryption key for a given partner
-
-    Args:
-        partner_name (str): The partner name
-        key (bytes): The updated encryption key
-    """
-
-    logging.debug(f"Updating encryption key for partner {partner_name}")
-    secrets_client = boto3.client(
-        "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
-    )
-    secrets_client.put_secret_value(SecretId=partner_name, SecretBinary=key)
-
-
 def get_jwt() -> str:
     """
     Get the G.h JWT
@@ -84,6 +49,33 @@ def get_jwt() -> str:
     token = response.get("AuthenticationResult", {}).get("AccessToken")
 
     return token
+
+
+def get_certificate(domain_name: str) -> bytes:
+    logging.info(f"Getting certificate from AWS for domain {domain_name}")
+    acm_client = boto3.client("acm", region_name=AWS_REGION)
+    if LOCALSTACK_URL:
+        acm_client = boto3.client(
+            "acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+        )
+    response = acm_client.list_certificates()
+    logging.debug(f"Response: {response}")
+    certificates_list = response.get("CertificateSummaryList", [])
+
+    certificate_arn = ""
+    for certificate in certificates_list:
+        if certificate.get("DomainName") == domain_name:
+            certificate_arn = certificate.get("CertificateArn", "")
+
+    if not certificate_arn:
+        logging.warning(f"No certificate for domain {domain_name}")
+        return b""
+
+    response = acm_client.get_certificate(CertificateArn=certificate_arn)
+    cert_str = response.get("Certificate")
+    certificate = bytes(cert_str, encoding="utf8")
+
+    return certificate
 
 
 def store_data_in_s3(data: list, bucket_name: str, file_name: str) -> None:

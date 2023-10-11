@@ -17,7 +17,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from amqp_server import publish_message
-from aws import get_jwt
+from aws import get_jwt, get_certificate
 from db import get_gh_db_data
 from constants import (
     PARTNER_A_NAME,
@@ -41,7 +41,7 @@ from constants import (
     TOPIC_A_EXCHANGE,
     TOPIC_A_ROUTE,
 )
-from grpc_client import get_metadata, get_partner_cases
+from grpc_client import get_partner_cases, get_credentials
 
 
 SECRETS_CLIENT = boto3.client(
@@ -144,9 +144,7 @@ class NoMessageException(Exception):
     pass
 
 
-def consume_messages(
-    write_pipe: multiprocessing.connection.Connection, exchange: str, route: str
-) -> None:
+def consume_messages(write_pipe: object, exchange: str, route: str) -> None:
     """
     Consume messages and create acknowledgments
 
@@ -178,7 +176,7 @@ def consume_messages(
     channel.start_consuming()
 
 
-def wait_for_message(read_pipe):
+def wait_for_message(read_pipe: object) -> None:
     """
     Wait a given amount of time for a message acknowledgment
 
@@ -248,9 +246,10 @@ def test_get_partner_cases():
     """
 
     token = get_jwt()
-    metadata = get_metadata(token)
+    certificate = get_certificate(PartnerA.domain_name)
+    credentials = get_credentials(token, certificate)
     try:
-        cases = get_partner_cases(PATHOGEN_A, PartnerA, metadata)
+        cases = get_partner_cases(PATHOGEN_A, PartnerA, credentials)
     except Exception:
         pytest.fail("Failed to get cases")
     finally:
@@ -306,12 +305,12 @@ def test_graphql():
     approve_data(collection_name)
     # Get all cases, return only their locations
     query = f"""
-		query Cases {{
-			cases(pathogen: "{PATHOGEN_A}"){{
-				locationInformation
-			}}
-		}}
-	"""
+        query Cases {{
+            cases(pathogen: "{PATHOGEN_A}"){{
+                locationInformation
+            }}
+        }}
+    """
 
     db_cases = get_gh_db_data(collection_name)
     expected = [case.get("location_information") for case in db_cases]
@@ -333,12 +332,12 @@ def test_query_requires_pathogen():
     """
 
     query = """
-		query Cases {
-			cases {
-				locationInformation
-			}
-		}
-	"""
+        query Cases {
+            cases {
+                locationInformation
+            }
+        }
+    """
 
     response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
     assert response.status_code == 400
@@ -350,12 +349,12 @@ def test_query_untracked_pathogen():
     """
 
     query = """
-		query Cases {
-			cases(pathogen: "foo") {
-				locationInformation
-			}
-		}
-	"""
+        query Cases {
+            cases(pathogen: "foo") {
+                locationInformation
+            }
+        }
+    """
 
     response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
     assert response.status_code == 400
@@ -380,12 +379,12 @@ def test_data_lifecycle():
     send_work_request(api_key, PATHOGEN_A, GET_CASES_JOB)
 
     query = f"""
-		query Cases {{
-			cases(pathogen: "{PATHOGEN_A}"){{
-				locationInformation
-			}}
-		}}
-	"""
+        query Cases {{
+            cases(pathogen: "{PATHOGEN_A}"){{
+                locationInformation
+            }}
+        }}
+    """
 
     collection_name = CASE_COLLECTIONS.get(PATHOGEN_A)
     db_cases = get_gh_db_data(collection_name)
@@ -454,12 +453,12 @@ def test_auto_verified_data_public():
         amqp_consumer.terminate()
 
     query = f"""
-		query Cases {{
-			cases(pathogen: "{PATHOGEN_A}"){{
-				locationInformation
-			}}
-		}}
-	"""
+        query Cases {{
+            cases(pathogen: "{PATHOGEN_A}"){{
+                locationInformation
+            }}
+        }}
+    """
 
     collection_name = CASE_COLLECTIONS.get(PATHOGEN_A)
     db_cases = get_gh_db_data(collection_name)
@@ -491,12 +490,12 @@ def test_curator_data_not_public():
     approve_data(collection_name)
 
     query = f"""
-		query Cases {{
-			cases(pathogen: "{PATHOGEN_A}"){{
-				createdBy
-			}}
-		}}
-	"""
+        query Cases {{
+            cases(pathogen: "{PATHOGEN_A}"){{
+                createdBy
+            }}
+        }}
+    """
 
     response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
 
@@ -504,12 +503,12 @@ def test_curator_data_not_public():
     assert not json.loads(response.text).get("cases")[0].get("createdBy")
 
     query = f"""
-		query Cases {{
-			cases(pathogen: "{PATHOGEN_A}"){{
-				verifiedBy
-			}}
-		}}
-	"""
+        query Cases {{
+            cases(pathogen: "{PATHOGEN_A}"){{
+                verifiedBy
+            }}
+        }}
+    """
 
     response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
 

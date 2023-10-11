@@ -34,6 +34,7 @@ env:
   POSTGRES_USER: ${{ vars.POSTGRES_USER }}
   POSTGRES_PASSWORD: ${{ vars.POSTGRES_PASSWORD }}
   PARTNER_TABLE_NAME: ${{ vars.PARTNER_TABLE_NAME }}
+  FLASK_PORT: ${{ vars.FLASK_PORT }}
 
 jobs:
   tests:
