@@ -5,9 +5,9 @@ Wait for the gRPC server to accept connections
 import logging
 from time import sleep
 
-from aws import get_jwt
+from aws import get_jwt, get_certificate
 from constants import PATHOGEN_A, PartnerA
-from grpc_client import get_metadata, get_partner_cases
+from grpc_client import get_credentials, get_partner_cases
 from util import setup_logger
 
 
@@ -27,8 +27,9 @@ def wait_for_grpc() -> None:
     for _ in range(MAX_ATTEMPTS):
         try:
             token = get_jwt()
-            metadata = get_metadata(token)
-            _ = get_partner_cases(PATHOGEN_A, PartnerA, metadata)
+            certificate = get_certificate(PartnerA.domain_name)
+            credentials = get_credentials(token, certificate)
+            _ = get_partner_cases(PATHOGEN_A, PartnerA, credentials)
             logging.info("gRPC ready")
             return
         except Exception:

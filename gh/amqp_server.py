@@ -6,16 +6,15 @@ import logging
 import os
 
 import boto3
-from cryptography.fernet import Fernet
 from flask import Flask
 from flask_httpauth import HTTPBasicAuth
 from google.protobuf.json_format import MessageToDict
 import pika
 
-from aws import get_jwt, store_data_in_s3, store_file_in_s3, update_encryption_key
+from aws import get_jwt, store_data_in_s3, store_file_in_s3, get_certificate
 from db import store_data_in_db, get_curation_data
 from graphics import create_plot
-from grpc_client import get_metadata, get_partner_cases, get_partner_rt_estimates
+from grpc_client import get_credentials, get_partner_cases, get_partner_rt_estimates
 from util import setup_logger, cleanup_file, clean_cases_data, clean_estimates_data
 from constants import (
     PathogenConfig,
@@ -45,27 +44,6 @@ SECRETS_CLIENT = boto3.client(
 )
 
 AUTO_APPROVE_ROLE = "senior"
-
-
-def decrypt_response(encrypted_response: list, encryption_key: bytes) -> list:
-    """
-    Decrypt a response
-
-    Args:
-        encrypted_response (list): An encrypted response
-        encryption_key (bytes): A key used for encryption
-
-    Returns:
-        list: A decrypted response
-    """
-    decrypted_response = []
-    fernet = Fernet(encryption_key)
-    for elem in encrypted_response:
-        decrypted = {}
-        for k, v in elem.items():
-            decrypted[k] = fernet.decrypt(str(v).encode()).decode()
-        decrypted_response.append(decrypted)
-    return decrypted_response
 
 
 def publish_message(message: str, pathogen_config: PathogenConfig) -> None:
@@ -142,8 +120,8 @@ def add_curation_data(
 
 
 def run_get_cases_job(
-    pathogen_config: PathogenConfig, partner: Partner, metadata: list[tuple], key: bytes
-) -> None:
+    pathogen_config: PathogenConfig, partner: Partner, metadata: list[tuple]
+):
     """
     Get cases for a pathogen from a partner
 
@@ -151,18 +129,20 @@ def run_get_cases_job(
         pathogen_config (PathogenConfig): Pathogen configuration data
         partner (Partner): Partner configuration data
         metadata (list[tuple]): gRPC request metadata
-        key (bytes): Encryption key
     """
+
     logging.info(f"Getting cases for pathogen {pathogen_config.name}")
     proto_cases = get_partner_cases(pathogen_config.name, partner, metadata)
     dict_cases = MessageToDict(proto_cases, preserving_proto_field_name=True).get(
         "cases"
     )
-    logging.debug(f"Encrypted new cases: {dict_cases}")
-    # TODO: If no data log critical and skip
-    decryped_cases = decrypt_response(dict_cases, key)
-    logging.debug(f"Decrypted new cases: {decryped_cases}")
-    cleaned_cases = clean_cases_data(decryped_cases)
+    if not dict_cases:
+        logging.warning(
+            f"No cases obtained from partner {partner.name} for pathogen {pathogen_config.name}"
+        )
+        return
+    logging.debug(f"New cases: {dict_cases}")
+    cleaned_cases = clean_cases_data(dict_cases)
     logging.debug(f"Cleaned new cases: {cleaned_cases}")
     curation_data = get_curation_data(partner.name)
     auto_approve = should_auto_approve(curation_data)
@@ -171,7 +151,6 @@ def run_get_cases_job(
     )
     add_curation_data(partner.name, curation_data, auto_approve, cleaned_cases)
     store_data_in_db(cleaned_cases, pathogen_config.cases_collection)
-    # TODO: only publish if created by senior curator
     if auto_approve:
         publish_message("New cases stored", pathogen_config)
     else:
@@ -179,8 +158,8 @@ def run_get_cases_job(
 
 
 def run_estimate_rt_job(
-    pathogen_config: PathogenConfig, partner: Partner, metadata: list[tuple], key: bytes
-) -> None:
+    pathogen_config: PathogenConfig, partner: Partner, metadata: list[tuple]
+):
     """
     Get R(t) estimates for a pathogen from a partner
 
@@ -188,18 +167,20 @@ def run_estimate_rt_job(
         pathogen_config (PathogenConfig): Pathogen configuration data
         partner (Partner): Partner configuration data
         metadata (list[tuple]): gRPC request metadata
-        key (bytes): Encryption key
     """
+
     logging.info(f"Estimating R(t) for pathogen {pathogen_config.name}")
     proto_estimates = get_partner_rt_estimates(pathogen_config.name, partner, metadata)
     dict_estimates = MessageToDict(
         proto_estimates, including_default_value_fields=True
     ).get("estimates")
-    logging.debug(f"Encrypted new estimates: {dict_estimates}")
-    # TODO: If no data log critical and skip
-    decryped_estimates = decrypt_response(dict_estimates, key)
-    logging.debug(f"Decrypted new estimates: {decryped_estimates}")
-    cleaned_estimates = clean_estimates_data(decryped_estimates)
+    if not dict_estimates:
+        logging.warning(
+            f"No R(t) estimates obtained from partner {partner.name} for pathogen {pathogen_config.name}"
+        )
+        return
+    logging.debug(f"New estimates: {dict_estimates}")
+    cleaned_estimates = clean_estimates_data(dict_estimates)
     logging.debug(f"Cleaned new estimates: {cleaned_estimates}")
     curation_data = get_curation_data(partner.name)
     auto_approve = should_auto_approve(curation_data)
@@ -208,9 +189,8 @@ def run_estimate_rt_job(
     )
     add_curation_data(partner.name, curation_data, auto_approve, cleaned_estimates)
     store_data_in_db(cleaned_estimates, pathogen_config.rt_collection)
-    file_name = create_plot(cleaned_estimates, partner.name)
+    file_name = create_plot(cleaned_estimates, partner.location)
     store_file_in_s3(pathogen_config.s3_bucket, RT_ESTIMATES_FOLDER, file_name)
-    # TODO: only publish if created by senior curator
     if auto_approve:
         publish_message("New R(t) estimates stored", pathogen_config)
     else:
@@ -218,7 +198,7 @@ def run_estimate_rt_job(
     cleanup_file(file_name)
 
 
-def run_jobs(pathogen_name: str, job_name: str) -> None:
+def run_jobs(pathogen_name: str, job_name: str):
     """
     Run a requested job for a given pathogen
 
@@ -226,20 +206,21 @@ def run_jobs(pathogen_name: str, job_name: str) -> None:
         pathogen_name (str): Name of the pathogen
         job_name (str): Name of the job
     """
-    logging.info(f"Running {job_name} for {pathogen_name}")
-    for partner in PATHOGEN_DATA_SOURCES.get(pathogen_name):
+
+    partners = PATHOGEN_DATA_SOURCES.get(pathogen_name)
+    logging.info(f"Running {job_name} for {pathogen_name} on partners {partners}")
+    for partner in partners:
         logging.info(
             f"Running {job_name} for {pathogen_name} with partner {partner.name}"
         )
         token = get_jwt()
-        metadata = get_metadata(token)
+        certificate = get_certificate(partner.domain_name)
+        credentials = get_credentials(token, certificate)
         pathogen_config = PATHOGEN_DATA_DESTINATIONS.get(pathogen_name)
-        key = Fernet.generate_key()
-        update_encryption_key(partner.name, key)
         if job_name == GET_CASES_JOB:
-            run_get_cases_job(pathogen_config, partner, metadata, key)
+            run_get_cases_job(pathogen_config, partner, credentials)
         elif job_name == ESTIMATE_RT_JOB:
-            run_estimate_rt_job(pathogen_config, partner, metadata, key)
+            run_estimate_rt_job(pathogen_config, partner, credentials)
 
 
 @AUTH.verify_password

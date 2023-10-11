@@ -10,7 +10,7 @@ PARTNER_A_NAME = os.environ.get("PARTNER_A_NAME")
 PARTNER_B_NAME = os.environ.get("PARTNER_B_NAME")
 PARTNER_C_NAME = os.environ.get("PARTNER_C_NAME")
 
-PARTNER_A_LOCATION = "A-land"
+PARTNER_A_LOCATION = os.environ.get("PARTNER_A_LOCATION")
 
 PATHOGEN_A = os.environ.get("PATHOGEN_A", "")
 PATHOGEN_B = os.environ.get("PATHOGEN_B", "")
@@ -63,6 +63,10 @@ TOPIC_C_ROUTE = PATHOGEN_C + "_topic_route"
 GRPC_C_HOST = os.environ.get("GRPC_C_HOST")
 GRPC_C_PORT = os.environ.get("GRPC_C_PORT")
 
+DOMAIN_NAME_A = os.environ.get("ACM_CERT_DOMAIN_NAME_A", "fake_grpc_server")
+DOMAIN_NAME_B = os.environ.get("ACM_CERT_DOMAIN_NAME_B")
+DOMAIN_NAME_C = os.environ.get("ACM_CERT_DOMAIN_NAME_C")
+
 GRAPHQL_PORT = os.environ.get("GRAPHQL_PORT")
 GRAPHQL_ENDPOINT = "graphql"
 
@@ -109,13 +113,17 @@ COGNITO_USER_PASSWORD = os.environ.get("COGNITO_USER_PASSWORD")
 @dataclass
 class Partner:
     name: str
+    domain_name: str
     grpc_host: str
     grpc_port: int
+    location: str
 
 
-PartnerA = Partner(PARTNER_A_NAME, GRPC_A_HOST, GRPC_A_PORT)
-PartnerB = Partner(PARTNER_B_NAME, GRPC_B_HOST, GRPC_B_PORT)
-PartnerC = Partner(PARTNER_C_NAME, GRPC_C_HOST, GRPC_C_PORT)
+PartnerA = Partner(
+    PARTNER_A_NAME, DOMAIN_NAME_A, GRPC_A_HOST, GRPC_A_PORT, PARTNER_A_LOCATION
+)
+PartnerB = Partner(PARTNER_B_NAME, DOMAIN_NAME_B, GRPC_B_HOST, GRPC_B_PORT, "")
+PartnerC = Partner(PARTNER_C_NAME, DOMAIN_NAME_C, GRPC_C_HOST, GRPC_C_PORT, "")
 PARTNERS = [PartnerA, PartnerB, PartnerC]
 
 

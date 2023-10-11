@@ -46,6 +46,7 @@ env:
   GH_DB_PORT: ${{ vars.GH_DB_PORT }}
   GH_DB_NAME: ${{ vars.GH_DB_NAME }}
   GH_USERS_COLLECTION: ${{ vars.GH_USERS_COLLECTION }}
+  ACM_CERT_DOMAIN_NAME: ${{ vars.ACM_CERT_DOMAIN_NAME }}
 
 jobs:
   tests:

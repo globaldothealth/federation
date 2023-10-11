@@ -42,6 +42,7 @@ services:
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
       PARTNER_B_NAME: "${PARTNER_B_NAME}"
       PARTNER_C_NAME: "${PARTNER_C_NAME}"
+      PARTNER_A_LOCATION: "${PARTNER_A_LOCATION}"
       GH_A_COLLECTION: "${PATHOGEN_A}"
       GH_B_COLLECTION: "${PATHOGEN_B}"
       GH_C_COLLECTION: "${PATHOGEN_C}"
@@ -51,6 +52,9 @@ services:
       GH_USERS_COLLECTION: "${GH_USERS_COLLECTION}"
       COGNITO_USER_NAME: "${COGNITO_USER_NAME}"
       COGNITO_USER_PASSWORD: "${COGNITO_USER_PASSWORD}"
+      ACM_CERT_DOMAIN_NAME_A: partner_a
+      ACM_CERT_DOMAIN_NAME_B: partner_b
+      ACM_CERT_DOMAIN_NAME_C: partner_c
     expose:
       - 5000
 
@@ -118,17 +122,21 @@ services:
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
       PARTNER_B_NAME: "${PARTNER_B_NAME}"
       PARTNER_C_NAME: "${PARTNER_C_NAME}"
-      SIM_A_HOST: "sim_a"
+      PARTNER_A_LOCATION: "${PARTNER_A_LOCATION}"
+      SIM_A_HOST: sim_a
       SIM_A_PORT: "${SIM_A_PORT}"
-      SIM_B_HOST: "sim_b"
+      SIM_B_HOST: sim_b
       SIM_B_PORT: "${SIM_B_PORT}"
-      SIM_C_HOST: "sim_c"
+      SIM_C_HOST: sim_c
       SIM_C_PORT: "${SIM_C_PORT}"
       SIM_A_HEALTHCHECK_ENDPOINT: "http://sim_a:${SIM_A_PORT}/health"
       SIM_B_HEALTHCHECK_ENDPOINT: "http://sim_b:${SIM_B_PORT}/health"
       SIM_C_HEALTHCHECK_ENDPOINT: "http://sim_c:${SIM_C_PORT}/health"
       GH_HEALTH_ENDPOINT: "http://amqp_server:5000/health"
       GH_WORK_REQUEST_URL: "http://amqp_server:5000"
+      ACM_CERT_DOMAIN_NAME_A: partner_a
+      ACM_CERT_DOMAIN_NAME_B: partner_b
+      ACM_CERT_DOMAIN_NAME_C: partner_c
 
   localstack:
     image: localstack/localstack-pro
@@ -234,6 +242,7 @@ services:
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
       PARTNER_NAME: "${PARTNER_A_NAME}"
+      ACM_CERT_DOMAIN_NAME: partner_a
     expose:
       - 50051
 
@@ -273,6 +282,7 @@ services:
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
       PARTNER_NAME: "${PARTNER_B_NAME}"
+      ACM_CERT_DOMAIN_NAME: partner_b
     expose:
       - 50051
 
@@ -312,6 +322,7 @@ services:
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
       PARTNER_NAME: "${PARTNER_C_NAME}"
+      ACM_CERT_DOMAIN_NAME: partner_c
     expose:
       - 50051
 

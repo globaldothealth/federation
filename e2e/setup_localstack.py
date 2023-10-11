@@ -8,7 +8,6 @@ import sys
 from time import sleep
 
 import boto3
-from cryptography.fernet import Fernet
 import requests
 
 
@@ -22,6 +21,7 @@ S3_CLIENT = boto3.client("s3", endpoint_url=LOCALSTACK_URL)
 SECRETS_CLIENT = boto3.client(
     "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
 )
+ACM_CLIENT = boto3.client("acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
 
 USER_POOL_NAME = os.environ.get("COGNITO_USER_POOL_NAME")
 USER_POOL_CLIENT_NAME = os.environ.get("COGNITO_USER_POOL_CLIENT_NAME")
@@ -38,6 +38,12 @@ PARTNER_B_NAME = os.environ.get("PARTNER_B_NAME")
 PARTNER_C_NAME = os.environ.get("PARTNER_C_NAME")
 
 PARTNER_NAMES = [PARTNER_A_NAME, PARTNER_B_NAME, PARTNER_C_NAME]
+
+CERT_DOMAIN_NAME_A = os.environ.get("ACM_CERT_DOMAIN_NAME_A", PARTNER_A_NAME)
+CERT_DOMAIN_NAME_B = os.environ.get("ACM_CERT_DOMAIN_NAME_B", PARTNER_B_NAME)
+CERT_DOMAIN_NAME_C = os.environ.get("ACM_CERT_DOMAIN_NAME_C", PARTNER_C_NAME)
+
+PARTNER_CERT_DOMAINS = [CERT_DOMAIN_NAME_A, CERT_DOMAIN_NAME_B, CERT_DOMAIN_NAME_C]
 
 
 def setup_logger() -> None:
@@ -56,7 +62,7 @@ def wait_for_localstack() -> None:
     Wait for localstack services to be ready
 
     Raises:
-            Exception: If localstack services are not available in the expected time
+        Exception: If localstack services are not available in the expected time
     """
 
     logging.info("Waiting for localstack")
@@ -66,9 +72,11 @@ def wait_for_localstack() -> None:
         try:
             response = requests.get(healthcheck_url)
             cognito_status = response.json().get("services", {}).get("cognito-idp")
-            if cognito_status == "running":
+            acm_status = response.json().get("services", {}).get("acm")
+            if acm_status == "running" and cognito_status == "running":
                 return
             # Lazy loading
+            _ = ACM_CLIENT.list_certificates()
             _ = COGNITO_CLIENT.list_user_pools(MaxResults=1)
         except requests.exceptions.ConnectionError:
             pass
@@ -106,10 +114,10 @@ def bucket_exists(bucket_name: str) -> bool:
     Check whether an S3 bucket exists
 
     Args:
-            bucket_name (str): The name of the S3 bucket
+        bucket_name (str): The name of the S3 bucket
 
     Returns:
-            bool: True if the bucket exists, False if it does not
+        bool: True if the bucket exists, False if it does not
     """
 
     response = S3_CLIENT.list_buckets()
@@ -142,10 +150,6 @@ def setup_secrets_manager() -> None:
     """
 
     for name in PARTNER_NAMES:
-        logging.info(f"Creating secret: {name}")
-        key = Fernet.generate_key()
-        _ = SECRETS_CLIENT.create_secret(Name=name, SecretBinary=key)
-        logging.info("Created secret")
         logging.info(f"Creating secret: {name}_api_key")
         response = SECRETS_CLIENT.get_random_password(ExcludePunctuation=True)
         password = response.get("RandomPassword")
@@ -155,9 +159,22 @@ def setup_secrets_manager() -> None:
         logging.info("Created secret")
 
 
+def setup_acm() -> None:
+    """
+    Setup AWS ACM resources
+    """
+
+    logging.info("Creating AWS ACM certificates")
+    for domain_name in [CERT_DOMAIN_NAME_A, CERT_DOMAIN_NAME_B, CERT_DOMAIN_NAME_C]:
+        logging.info(f"Created certificate for domain {domain_name}")
+        _ = ACM_CLIENT.request_certificate(DomainName=domain_name)
+        logging.info(f"Created certificate for domain {domain_name}")
+
+
 if __name__ == "__main__":
     setup_logger()
     wait_for_localstack()
     setup_cognito()
     create_buckets()
     setup_secrets_manager()
+    setup_acm()

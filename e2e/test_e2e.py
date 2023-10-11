@@ -58,6 +58,7 @@ LOCALSTACK_URL = os.environ.get("LOCALSTACK_URL")
 S3_BUCKET = os.environ.get("S3_A_BUCKET")
 S3_CASES_FILE_NAME = f"{PATHOGEN_A}.json"
 S3_RT_FILE_NAME = f"{PATHOGEN_A}_rt.json"
+RT_ESTIMATES_FOLDER = "rt_estimates"
 
 AWS_REGION = os.environ.get("AWS_REGION")
 SECRETS_CLIENT = boto3.client(
@@ -96,9 +97,7 @@ FAKE_CASE = {
 }
 
 
-def consume_messages(
-    write_pipe: multiprocessing.connection.Connection, exchange: str, route: str
-) -> None:
+def consume_messages(write_pipe: object, exchange: str, route: str) -> None:
     """
     Consume messages and create acknowledgments
 
@@ -130,7 +129,7 @@ def consume_messages(
     channel.start_consuming()
 
 
-def wait_for_message(read_pipe: multiprocessing.connection.Connection) -> None:
+def wait_for_message(read_pipe: object) -> None:
     """
     Wait a given amount of time for a message acknowledgment
 
@@ -221,6 +220,8 @@ def get_gh_s3_data(file_name: str, retry: bool = True) -> dict:
         Exception: The data should download
     """
 
+    logging.info("Files in S3")
+
     s3 = boto3.resource("s3", endpoint_url=LOCALSTACK_URL)
     obj = s3.Object(S3_BUCKET, file_name)
     try:
@@ -236,33 +237,25 @@ def get_gh_s3_data(file_name: str, retry: bool = True) -> dict:
         raise Exception(f"Could not get data from {file_name} from bucket {S3_BUCKET}")
 
 
-def get_gh_s3_file(file_name: str, retry: bool = True) -> None:
+def find_gh_s3_file(file_name: str) -> None:
     """
-    Download a file from AWS S3
+    Locate a file in AWS S3
 
     Args:
         file_name (str): The name of the file
-        retry (bool, optional): Whether the function should retry instead of raise an Exception
-
-    Returns:
-        None: Description
 
     Raises:
-        Exception: The file should download
+        Exception: The file should be located
     """
 
     s3 = boto3.client("s3", endpoint_url=LOCALSTACK_URL)
-    try:
-        s3.download_file(S3_BUCKET, file_name, file_name)
-    except Exception:
-        logging.exception(
-            f"An exception happened trying to download {file_name} from bucket {S3_BUCKET}"
-        )
-        # eventual consistency, immediate jank
-        if retry:
-            sleep(5)
-            return get_gh_s3_data(file_name, retry=False)
-        raise Exception(f"Could not download {file_name} from bucket {S3_BUCKET}")
+
+    response = s3.list_objects_v2(Bucket=S3_BUCKET)
+
+    for content in response.get("Contents", []):
+        if content.get("Key") == file_name:
+            return
+    raise Exception(f"Could not locate {file_name} in bucket {S3_BUCKET}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -397,7 +390,7 @@ def test_multiple_outbreaks():
         amqp_consumer.terminate()
         pytest.fail(f"Could not POST {case} to endpoint {SIM_B_ENDPOINT}")
 
-    # G.h needs to be send work request to make gRPC request to service
+    # G.h needs to be sent work request to make gRPC request to service
     try:
         key = get_api_key(PARTNER_B_NAME)
         send_work_request(PARTNER_B_NAME, key, PATHOGEN_B, GET_CASES_JOB)
@@ -580,8 +573,8 @@ def test_rt_estimates_in_gh():
     assert gql_rt_estimates == db_rt_estimates
 
     logging.info("Checking for R(t) estimate graphic in S3")
-    file_path = f"{PATHOGEN_A}/{date.today()}_{PARTNER_A_LOCATION}.png"
+    file_path = f"{RT_ESTIMATES_FOLDER}/{date.today()}_{PARTNER_A_LOCATION}.png"
     try:
-        get_gh_s3_file(file_path)
+        find_gh_s3_file(file_path)
     except Exception:
         pytest.fail(f"Could not get R(t) graph from {file_path}")

@@ -54,6 +54,7 @@ services:
       JWKS_FILE: "${JWKS_FILE}"
       PATHOGEN: "${PATHOGEN_A}"
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      ACM_CERT_DOMAIN_NAME_A: "${ACM_CERT_DOMAIN_NAME}"
     expose:
       - "${GRPC_A_PORT}"
 
@@ -70,6 +71,7 @@ services:
       JWKS_FILE: "${JWKS_FILE}"
       PATHOGEN: "${PATHOGEN_A}"
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      ACM_CERT_DOMAIN_NAME_A: "${ACM_CERT_DOMAIN_NAME}"
     depends_on:
       - rabbitmq
       - localstack

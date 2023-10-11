@@ -38,6 +38,8 @@ services:
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
       PARTNER_B_NAME: "${PARTNER_B_NAME}"
       PARTNER_C_NAME: "${PARTNER_C_NAME}"
+      PARTNER_A_LOCATION: "${PARTNER_A_LOCATION}"
+      ACM_CERT_DOMAIN_NAME_A: "${ACM_CERT_DOMAIN_NAME}"
 
   graphql_server:
     build:
@@ -91,6 +93,7 @@ services:
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
       PARTNER_B_NAME: "${PARTNER_B_NAME}"
       PARTNER_C_NAME: "${PARTNER_C_NAME}"
+      PARTNER_A_LOCATION: "${PARTNER_A_LOCATION}"
       GH_WORK_REQUEST_URL: "http://grpc_client:5000"
       HEALTHCHECK_ENDPOINT: "http://grpc_client:5000/health"
 
@@ -110,6 +113,7 @@ services:
       JWKS_FILE: "${JWKS_FILE}"
       PATHOGEN: "${PATHOGEN_A}"
       PARTNER_A_NAME: "${PARTNER_A_NAME}"
+      ACM_CERT_DOMAIN_NAME_A: "${ACM_CERT_DOMAIN_NAME}"
     expose:
       - "${GRPC_A_PORT}"
 

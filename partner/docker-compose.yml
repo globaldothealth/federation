@@ -38,6 +38,7 @@ services:
       DB_PASSWORD: "${POSTGRES_PASSWORD}"
       DB_TABLE_NAME: "${PARTNER_TABLE_NAME}"
       JWKS_FILE: "${JWKS_FILE}"
+      ACM_CERT_DOMAIN_NAME: partner_service
     expose:
       - "${GRPC_PORT}"
 
