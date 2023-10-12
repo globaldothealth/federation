@@ -1,3 +1,7 @@
+"""
+Functions for interacting with database
+"""
+
 import logging
 
 from pymongo import MongoClient
@@ -6,6 +10,15 @@ from constants import DB_CONNECTION, DATABASE_NAME, USERS_COLLECTION
 
 
 def get_curation_data(partner_name: str) -> dict:
+    """
+    Get curation data for a given partner
+
+    Args:
+        partner_name (str): The partner name
+
+    Returns:
+        dict: A partner's curation data
+    """
     client = MongoClient(DB_CONNECTION)
     db = client[DATABASE_NAME]
     collection = db[USERS_COLLECTION]
@@ -15,6 +28,15 @@ def get_curation_data(partner_name: str) -> dict:
 
 
 def get_gh_db_data(collection_name: str) -> list[dict]:
+    """
+    Get data from a collection in the database
+
+    Args:
+        collection_name (str): The collection name
+
+    Returns:
+        list[dict]: Requested data from the collection
+    """
     client = MongoClient(DB_CONNECTION)
     db = client[DATABASE_NAME]
     collection = db[collection_name]
@@ -24,6 +46,13 @@ def get_gh_db_data(collection_name: str) -> list[dict]:
 
 
 def store_data_in_db(data: list, collection_name: str) -> None:
+    """
+    Store data in a collection in the database
+
+    Args:
+        data (list): Description
+        collection_name (str): The collection name
+    """
     logging.info("Storing data in DB")
     try:
         client = MongoClient(DB_CONNECTION)

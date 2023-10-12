@@ -1,3 +1,7 @@
+"""
+G.h constants
+"""
+
 from dataclasses import dataclass
 import os
 
@@ -35,7 +39,7 @@ RT_PARAMS = {
     "q_lower": 0.3,
     "q_upper": 0.7,
     "gt_distribution": [0.25, 0.5, 0.25],
-    "delay_distribution": [0.1, 0.5, 0.4]
+    "delay_distribution": [0.1, 0.5, 0.4],
 }
 
 TOPIC_A_EXCHANGE = PATHOGEN_A + "_topic_exchange"
@@ -126,9 +130,33 @@ class PathogenConfig:
     s3_bucket: str
 
 
-PathogenConfigA = PathogenConfig(PATHOGEN_A, TOPIC_A_EXCHANGE, TOPIC_A_ROUTE, TOPIC_A_QUEUE, GH_A_COLLECTION, GH_D_COLLECTION, S3_A_BUCKET)
-PathogenConfigB = PathogenConfig(PATHOGEN_B, TOPIC_B_EXCHANGE, TOPIC_B_ROUTE, TOPIC_B_QUEUE, GH_B_COLLECTION, GH_E_COLLECTION, S3_B_BUCKET)
-PathogenConfigC = PathogenConfig(PATHOGEN_C, TOPIC_C_EXCHANGE, TOPIC_C_ROUTE, TOPIC_C_QUEUE, GH_C_COLLECTION, GH_F_COLLECTION, S3_C_BUCKET)
+PathogenConfigA = PathogenConfig(
+    PATHOGEN_A,
+    TOPIC_A_EXCHANGE,
+    TOPIC_A_ROUTE,
+    TOPIC_A_QUEUE,
+    GH_A_COLLECTION,
+    GH_D_COLLECTION,
+    S3_A_BUCKET,
+)
+PathogenConfigB = PathogenConfig(
+    PATHOGEN_B,
+    TOPIC_B_EXCHANGE,
+    TOPIC_B_ROUTE,
+    TOPIC_B_QUEUE,
+    GH_B_COLLECTION,
+    GH_E_COLLECTION,
+    S3_B_BUCKET,
+)
+PathogenConfigC = PathogenConfig(
+    PATHOGEN_C,
+    TOPIC_C_EXCHANGE,
+    TOPIC_C_ROUTE,
+    TOPIC_C_QUEUE,
+    GH_C_COLLECTION,
+    GH_F_COLLECTION,
+    S3_C_BUCKET,
+)
 
 
 @dataclass
@@ -145,11 +173,11 @@ AMQP_CONFIG = GhAMQPConfig(AMQP_HOST, DIRECT_EXCHANGE, DIRECT_QUEUE, DIRECT_ROUT
 PATHOGEN_DATA_SOURCES = {
     PATHOGEN_A: [PartnerA],
     PATHOGEN_B: [PartnerB],
-    PATHOGEN_C: [PartnerC]
+    PATHOGEN_C: [PartnerC],
 }
 
 PATHOGEN_DATA_DESTINATIONS = {
     PATHOGEN_A: PathogenConfigA,
     PATHOGEN_B: PathogenConfigB,
-    PATHOGEN_C: PathogenConfigC
+    PATHOGEN_C: PathogenConfigC,
 }

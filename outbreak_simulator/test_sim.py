@@ -1,3 +1,7 @@
+"""
+Outbreak simulator test suite
+"""
+
 import os
 
 import psycopg
@@ -12,6 +16,10 @@ TABLE_NAME = "OutbreakCase"
 
 
 def test_sim_creates_input_cases():
+    """
+    The sim should create cases with given data
+    """
+
     location = "USA"
     outcome = "A-OK"
     date_confirmation = "03-27-1985"
@@ -20,7 +28,7 @@ def test_sim_creates_input_cases():
         "location_information": location,
         "outcome": outcome,
         "date_confirmation": date_confirmation,
-        "hospitalized": hospitalized
+        "hospitalized": hospitalized,
     }
     case = Case(PATHOGEN, expected)
 
@@ -31,6 +39,10 @@ def test_sim_creates_input_cases():
 
 
 def test_sim_creates_random_cases():
+    """
+    The sim should create cases using fallback data (e.g. chosen by random.choice)
+    """
+
     case = Case(PATHOGEN)
 
     assert case.location_information
@@ -40,6 +52,10 @@ def test_sim_creates_random_cases():
 
 
 def test_sim_saves_cases():
+    """
+    The sim should save cases to the partner database
+    """
+
     case = Case(PATHOGEN)
 
     location = case.location_information
@@ -50,7 +66,7 @@ def test_sim_saves_cases():
         "location_information": location,
         "outcome": outcome,
         "date_confirmation": date_confirmation,
-        "hospitalized": hospitalized
+        "hospitalized": hospitalized,
     }
 
     save_cases([case])

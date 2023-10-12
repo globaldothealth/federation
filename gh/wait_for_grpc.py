@@ -1,3 +1,7 @@
+"""
+Wait for the gRPC server to accept connections
+"""
+
 import logging
 from time import sleep
 
@@ -11,21 +15,28 @@ WAIT_TIME = 2
 MAX_ATTEMPTS = 42
 
 
-def wait_for_grpc():
-	logging.info("Waiting for gRPC")
-	for _ in range(MAX_ATTEMPTS):
-		try:
-			token = get_jwt()
-			metadata = get_metadata(token)
-			_ = get_partner_cases(PATHOGEN_A, PartnerA, metadata)
-			logging.info("gRPC ready")
-			return
-		except Exception:
-			logging.exception("Could not get cases from partner, retrying")
-			sleep(WAIT_TIME)
-	raise Exception(f"gRPC not ready in {WAIT_TIME * MAX_ATTEMPTS} seconds")
+def wait_for_grpc() -> None:
+    """
+    Waits for the gRPC server to accept connections
+
+    Raises:
+        Exception: The server should accept connections in the given amount of time
+    """
+
+    logging.info("Waiting for gRPC")
+    for _ in range(MAX_ATTEMPTS):
+        try:
+            token = get_jwt()
+            metadata = get_metadata(token)
+            _ = get_partner_cases(PATHOGEN_A, PartnerA, metadata)
+            logging.info("gRPC ready")
+            return
+        except Exception:
+            logging.exception("Could not get cases from partner, retrying")
+            sleep(WAIT_TIME)
+    raise Exception(f"gRPC not ready in {WAIT_TIME * MAX_ATTEMPTS} seconds")
 
 
 if __name__ == "__main__":
-	setup_logger()
-	wait_for_grpc()
+    setup_logger()
+    wait_for_grpc()

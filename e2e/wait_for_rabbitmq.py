@@ -1,3 +1,7 @@
+"""
+Wait for the AMQP server to accept connections
+"""
+
 import os
 from time import sleep
 
@@ -10,14 +14,23 @@ WAIT_TIME = 10
 RETRIES = 5
 
 
-def wait_for_rabbitmq():
+def wait_for_rabbitmq() -> None:
+    """
+    Waits for the AMQP server to accept connections
+
+    Raises:
+        Exception: The AMQP server should accept connections in the given amount of time
+    """
+
     current_attempt = 0
     while current_attempt < RETRIES:
         try:
             _ = pika.BlockingConnection(pika.ConnectionParameters(host=AMQP_HOST))
             return
         except pika.exceptions.AMQPConnectionError:
-            print(f"Could not connect to RabbitMQ server at {AMQP_HOST}. Retrying in {WAIT_TIME} seconds.")
+            print(
+                f"Could not connect to RabbitMQ server at {AMQP_HOST}. Retrying in {WAIT_TIME} seconds."
+            )
             sleep(WAIT_TIME)
             current_attempt += 1
     raise Exception("Exiting now.")
