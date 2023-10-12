@@ -1,3 +1,7 @@
+"""
+End-to-end test suite
+"""
+
 from datetime import date
 import json
 import logging
@@ -56,7 +60,9 @@ S3_CASES_FILE_NAME = f"{PATHOGEN_A}.json"
 S3_RT_FILE_NAME = f"{PATHOGEN_A}_rt.json"
 
 AWS_REGION = os.environ.get("AWS_REGION")
-SECRETS_CLIENT = boto3.client("secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
+SECRETS_CLIENT = boto3.client(
+    "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+)
 
 GH_WORK_REQUEST_URL = os.environ.get("GH_WORK_REQUEST_URL")
 
@@ -86,11 +92,22 @@ FAKE_CASE = {
     "location_information": LOCATION_INFORMATION,
     "outcome": OUTCOME,
     "date_confirmation": DATE_CONFIRMATION,
-    "hospitalized": HOSPITALIZED
+    "hospitalized": HOSPITALIZED,
 }
 
 
-def consume_messages(write_pipe, exchange, route):
+def consume_messages(
+    write_pipe: multiprocessing.connection.Connection, exchange: str, route: str
+) -> None:
+    """
+    Consume messages and create acknowledgments
+
+    Args:
+        write_pipe (multiprocessing.connection.Connection): One end of pipe, mocks behavior of subscriber
+        exchange (str): Where the publisher sends a message
+        route (str): Where the exchange sends a message
+    """
+
     logging.info("Consuming messages")
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=AMQP_HOST))
     channel = connection.channel()
@@ -101,8 +118,7 @@ def consume_messages(write_pipe, exchange, route):
 
     logging.info(f"Created queue {queue_name}")
 
-    channel.queue_bind(
-        exchange=exchange, queue=queue_name, routing_key=route)
+    channel.queue_bind(exchange=exchange, queue=queue_name, routing_key=route)
 
     def callback(ch, method, properties, body):
         logging.debug("The topic message was received.")
@@ -114,7 +130,17 @@ def consume_messages(write_pipe, exchange, route):
     channel.start_consuming()
 
 
-def wait_for_message(read_pipe):
+def wait_for_message(read_pipe: multiprocessing.connection.Connection) -> None:
+    """
+    Wait a given amount of time for a message acknowledgment
+
+    Args:
+        read_pipe (multiprocessing.connection.Connection): One end of pipe, mocks behavior of subscriber
+
+    Raises:
+        Exception: The read pipe should receive a message acknowlegdment in a given amount of time
+    """
+
     logging.debug("Checking for message about cases.")
     current_attempt = 0
     while current_attempt < RETRIES:
@@ -127,18 +153,50 @@ def wait_for_message(read_pipe):
     raise Exception("Did not get message as expected.")
 
 
-def get_api_key(partner_name: str):
-    response = SECRETS_CLIENT.get_secret_value(SecretId=f"{partner_name}_api_key_password")
+def get_api_key(partner_name: str) -> str:
+    """
+    Get the API key for a partner from AWS Secrets Manager
+
+    Args:
+        partner_name (str): The partner to get an API key for
+
+    Returns:
+        str: The partner's API key
+    """
+
+    response = SECRETS_CLIENT.get_secret_value(
+        SecretId=f"{partner_name}_api_key_password"
+    )
     return response.get("SecretString")
 
 
-def send_work_request(partner_name: str, key: str, pathogen: str, job: str):
+def send_work_request(partner_name: str, key: str, pathogen: str, job: str) -> None:
+    """
+    Send a request for work to the Global.health server
+
+    Args:
+        partner_name (str): The name of the partner requesting work
+        key (str): The partner API key
+        pathogen (str): The name of the pathogen for requested work
+        job (str): The name of the job to be done
+    """
+
     auth = HTTPBasicAuth(partner_name, key)
     url = f"{GH_WORK_REQUEST_URL}/{pathogen}/{job}"
     _ = requests.get(url, auth=auth)
 
 
-def get_gh_db_data(collection_name: str):
+def get_gh_db_data(collection_name: str) -> list:
+    """
+    Get data from a collection in the Global.health database
+
+    Args:
+        collection_name (str): The name of the database collection
+
+    Returns:
+        list: The data retrieved from the collection
+    """
+
     logging.info("Getting data from db")
     client = MongoClient(DB_CONNECTION)
     db = client[DATABASE_NAME]
@@ -148,25 +206,58 @@ def get_gh_db_data(collection_name: str):
     return data
 
 
-def get_gh_s3_data(file_name, retry=True):
+def get_gh_s3_data(file_name: str, retry: bool = True) -> dict:
+    """
+    Get data from a file in AWS S3
+
+    Args:
+        file_name (str): The name of the file
+        retry (bool, optional): Whether the function should retry instead of raise an Exception
+
+    Returns:
+        dict: The data retrieved from S3
+
+    Raises:
+        Exception: The data should download
+    """
+
     s3 = boto3.resource("s3", endpoint_url=LOCALSTACK_URL)
     obj = s3.Object(S3_BUCKET, file_name)
     try:
         return json.loads(obj.get()["Body"].read().decode("utf-8"))
     except Exception:
-        logging.exception(f"An exception happened trying to return the contents of {file_name} from bucket {S3_BUCKET}")
+        logging.exception(
+            f"An exception happened trying to return the contents of {file_name} from bucket {S3_BUCKET}"
+        )
         # eventual consistency, immediate jank
         if retry:
             sleep(5)
             return get_gh_s3_data(file_name, retry=False)
+        raise Exception(f"Could not get data from {file_name} from bucket {S3_BUCKET}")
 
 
-def get_gh_s3_file(file_name, retry=True):
+def get_gh_s3_file(file_name: str, retry: bool = True) -> None:
+    """
+    Download a file from AWS S3
+
+    Args:
+        file_name (str): The name of the file
+        retry (bool, optional): Whether the function should retry instead of raise an Exception
+
+    Returns:
+        None: Description
+
+    Raises:
+        Exception: The file should download
+    """
+
     s3 = boto3.client("s3", endpoint_url=LOCALSTACK_URL)
     try:
         s3.download_file(S3_BUCKET, file_name, file_name)
     except Exception:
-        logging.exception(f"An exception happened trying to download {file_name} from bucket {S3_BUCKET}")
+        logging.exception(
+            f"An exception happened trying to download {file_name} from bucket {S3_BUCKET}"
+        )
         # eventual consistency, immediate jank
         if retry:
             sleep(5)
@@ -175,23 +266,35 @@ def get_gh_s3_file(file_name, retry=True):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def elevate_curator_roles():
+def elevate_curator_roles() -> None:
+    """
+    Elevate curator roles for partner data auto-approval
+    """
+
     logging.info("Elevating curator roles for partner data auto-approval")
     client = MongoClient(DB_CONNECTION)
     db = client[DATABASE_NAME]
     collection = db[GH_USERS_COLLECTION]
     for partner_name in PARTNER_NAMES:
         collection.update_one(
-            {"name": partner_name},
-            {"$set": {"roles": ["senior curator"]}}
+            {"name": partner_name}, {"$set": {"roles": ["senior curator"]}}
         )
 
 
 def test_sim_cases_in_gh():
+    """
+    Testing for presence of sim-created cases in G.h
+    A sim creates cases in a partner database, G.h requests and shares them
+    """
+
     logging.info("Testing for presence of sim-created cases in G.h")
     r, w = multiprocessing.Pipe()
 
-    args = (w, TOPIC_A_EXCHANGE, TOPIC_A_ROUTE,)
+    args = (
+        w,
+        TOPIC_A_EXCHANGE,
+        TOPIC_A_ROUTE,
+    )
     amqp_consumer = multiprocessing.Process(target=consume_messages, args=args)
     amqp_consumer.start()
 
@@ -253,7 +356,9 @@ def test_sim_cases_in_gh():
 
     try:
         response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
-        actual = [case.get("outcome") for case in json.loads(response.text).get("cases")]
+        actual = [
+            case.get("outcome") for case in json.loads(response.text).get("cases")
+        ]
     except Exception:
         pytest.fail(f"Could not do GraphQL query at {GRAPHQL_SERVICE}")
 
@@ -261,17 +366,30 @@ def test_sim_cases_in_gh():
 
 
 def test_multiple_outbreaks():
+    """
+    Testing for presence of sim-created cases in G.h, for multiple outbreaks
+    Sims create cases in partner databases, G.h requests and shares them
+    """
+
     logging.info("Testing for presence of sim-created cases in G.h")
     r, w = multiprocessing.Pipe()
 
-    args = (w, TOPIC_B_EXCHANGE, TOPIC_B_ROUTE,)
+    args = (
+        w,
+        TOPIC_B_EXCHANGE,
+        TOPIC_B_ROUTE,
+    )
     amqp_consumer = multiprocessing.Process(target=consume_messages, args=args)
     amqp_consumer.start()
 
     logging.info("Creating case with outbreak simulator")
     location_information = "USA"
     outcome = "recovered"
-    case = {"location_information": location_information, "outcome": outcome, "pathogen": PATHOGEN_B}
+    case = {
+        "location_information": location_information,
+        "outcome": outcome,
+        "pathogen": PATHOGEN_B,
+    }
 
     try:
         requests.post(SIM_B_ENDPOINT, json=[case])
@@ -297,7 +415,11 @@ def test_multiple_outbreaks():
 
     r, w = multiprocessing.Pipe()
 
-    args = (w, TOPIC_C_EXCHANGE, TOPIC_C_ROUTE,)
+    args = (
+        w,
+        TOPIC_C_EXCHANGE,
+        TOPIC_C_ROUTE,
+    )
     amqp_consumer = multiprocessing.Process(target=consume_messages, args=args)
     amqp_consumer.start()
 
@@ -341,7 +463,9 @@ def test_multiple_outbreaks():
 
     try:
         response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
-        actual = [case.get("outcome") for case in json.loads(response.text).get("cases")]
+        actual = [
+            case.get("outcome") for case in json.loads(response.text).get("cases")
+        ]
     except Exception:
         pytest.fail(f"Could not do GraphQL query at {GRAPHQL_SERVICE}")
 
@@ -359,7 +483,9 @@ def test_multiple_outbreaks():
 
     try:
         response = requests.get(url=GRAPHQL_SERVICE, params={"query": query})
-        actual = [case.get("outcome") for case in json.loads(response.text).get("cases")]
+        actual = [
+            case.get("outcome") for case in json.loads(response.text).get("cases")
+        ]
     except Exception:
         pytest.fail(f"Could not do GraphQL query at {GRAPHQL_SERVICE}")
 
@@ -367,10 +493,19 @@ def test_multiple_outbreaks():
 
 
 def test_rt_estimates_in_gh():
+    """
+    Testing for presence of R(t) estimates in G.h
+    G.h requests them R(t) estimates from partners and shares the results
+    """
+
     logging.info("Testing for presence of R(t) estimates in G.h")
     r, w = multiprocessing.Pipe()
 
-    args = (w, TOPIC_A_EXCHANGE, TOPIC_A_ROUTE,)
+    args = (
+        w,
+        TOPIC_A_EXCHANGE,
+        TOPIC_A_ROUTE,
+    )
     amqp_consumer = multiprocessing.Process(target=consume_messages, args=args)
     amqp_consumer.start()
 

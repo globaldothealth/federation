@@ -1,3 +1,7 @@
+"""
+Mock partner gRPC service for local development and testing
+"""
+
 from collections.abc import Callable
 from concurrent import futures
 import logging
@@ -12,22 +16,20 @@ import grpc
 from grpc_interceptor import ServerInterceptor
 from grpc_interceptor.exceptions import GrpcException
 
-from cases_pb2 import Case, CasesResponse
-from cases_pb2_grpc import (
-    add_CasesServicer_to_server,
-    CasesServicer
-)
-from rt_estimate_pb2 import RtEstimate, RtEstimateResponse
-from rt_estimate_pb2_grpc import (
-    add_RtEstimatesServicer_to_server,
-    RtEstimatesServicer
-)
+from cases_pb2 import Case, CasesRequest, CasesResponse
+from cases_pb2_grpc import add_CasesServicer_to_server, CasesServicer
+from rt_estimate_pb2 import RtEstimate, RtEstimateRequest, RtEstimateResponse
+from rt_estimate_pb2_grpc import add_RtEstimatesServicer_to_server, RtEstimatesServicer
 from constants import LOCALSTACK_URL, AWS_REGION, PATHOGEN_A, PARTNER_A_NAME
 from util import setup_logger
 
 
-COGNITO_CLIENT = boto3.client("cognito-idp", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
-SECRETS_CLIENT = boto3.client("secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
+COGNITO_CLIENT = boto3.client(
+    "cognito-idp", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+)
+SECRETS_CLIENT = boto3.client(
+    "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+)
 
 JWKS_HOST = os.environ.get("JWKS_HOST")
 JWKS_FILE = os.environ.get("JWKS_FILE")
@@ -35,14 +37,53 @@ JWKS_FILE = os.environ.get("JWKS_FILE")
 
 class CasesService(CasesServicer):
 
-    def GetCases(self, request, context):
-        cases = [Case(id=0, location_information="USA", outcome="Something", pathogen=PATHOGEN_A)]
+    """
+    Service for case data
+    """
+
+    def GetCases(self, request: CasesRequest, context: object) -> CasesResponse:
+        """
+        Get case data
+
+        Args:
+            request (CasesRequest): A request for case data
+            context (grpc._server._Context): Context for request
+
+        Returns:
+            CasesResponse: A response containing case data
+        """
+
+        cases = [
+            Case(
+                id=0,
+                location_information="USA",
+                outcome="Something",
+                pathogen=PATHOGEN_A,
+            )
+        ]
         return CasesResponse(cases=cases)
 
 
 class RtEstimateService(RtEstimatesServicer):
 
-    def GetRtEstimates(self, request, context):
+    """
+    Service for R(t) estimate data
+    """
+
+    def GetRtEstimates(
+        self, request: RtEstimateRequest, context: object
+    ) -> RtEstimateResponse:
+        """
+        Get R(t) estimate data
+
+        Args:
+            request (RtEstimateRequest): A request for R(t) estimate data
+            context (grpc._server._Context): Context for request
+
+        Returns:
+            RtEstimateResponse: A response containing R(t) estimate data
+        """
+
         rt_estimates = [
             RtEstimate(
                 date="foo",
@@ -50,13 +91,23 @@ class RtEstimateService(RtEstimatesServicer):
                 r_mean=str(0.4),
                 r_var=str(0.2),
                 q_lower=str(0.1),
-                q_upper=str(0.9)
+                q_upper=str(0.9),
             )
         ]
         return RtEstimateResponse(estimates=rt_estimates)
 
 
 def validate_jwt(metadata: dict) -> None:
+    """
+    Validate a JWT
+
+    Args:
+        metadata (dict): Request metadata, including JWT
+
+    Raises:
+        GrpcException: The JWT should validate
+    """
+
     logging.debug("Validating JWT")
     auth_header = metadata.get("authorization")
     status_code = grpc.StatusCode.UNAUTHENTICATED
@@ -67,9 +118,7 @@ def validate_jwt(metadata: dict) -> None:
     token = auth_header.split()[-1]
 
     # FIXME: matching
-    response = COGNITO_CLIENT.list_user_pools(
-        MaxResults=1
-    )
+    response = COGNITO_CLIENT.list_user_pools(MaxResults=1)
     logging.debug(f"User pools: {response.get('UserPools')}")
     pool_id = response.get("UserPools", [])[0].get("Id")
     logging.debug(f"Pool id: {pool_id}")
@@ -89,6 +138,11 @@ def validate_jwt(metadata: dict) -> None:
 
 
 class JWTValidationInterceptor(ServerInterceptor):
+
+    """
+    Interceptor for JWT validation
+    """
+
     def intercept(
         self,
         method: Callable,
@@ -96,6 +150,16 @@ class JWTValidationInterceptor(ServerInterceptor):
         context: grpc.ServicerContext,
         method_name: str,
     ) -> Any:
+        """
+        Intercept the request and validate the JWT
+
+        Args:
+            method (Callable): The RPC method
+            request (Any): The gRPC request
+            context (grpc.ServicerContext): The context
+            method_name (str): The name of the gRPC method
+        """
+
         try:
             metadata = dict(context.invocation_metadata())
             logging.debug(f"Metadata: {metadata}")
@@ -107,12 +171,24 @@ class JWTValidationInterceptor(ServerInterceptor):
             raise
 
 
-def get_encryption_key():
+def get_encryption_key() -> bytes:
+    """
+    Get the encryption key
+
+    Returns:
+        bytes: The encryption key
+    """
+
     response = SECRETS_CLIENT.get_secret_value(SecretId=PARTNER_A_NAME)
     return response.get("SecretBinary", b"")
 
 
 class EncryptionInterceptor(ServerInterceptor):
+
+    """
+    Interceptor for data encryption
+    """
+
     def intercept(
         self,
         method: Callable,
@@ -120,6 +196,16 @@ class EncryptionInterceptor(ServerInterceptor):
         context: grpc.ServicerContext,
         method_name: str,
     ) -> Any:
+        """
+        Intercept the request and encrypt data
+
+        Args:
+            method (Callable): The RPC method
+            request (Any): The gRPC request
+            context (grpc.ServicerContext): The context
+            method_name (str): The name of the gRPC method
+        """
+
         try:
             response = method(request, context)
             response_type = type(response)
@@ -143,19 +229,19 @@ class EncryptionInterceptor(ServerInterceptor):
 
 
 def serve():
+    """
+    Serve gRPC
+    """
+
     setup_logger()
     logging.info("Configuring gRPC server")
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
-        interceptors=[EncryptionInterceptor(), JWTValidationInterceptor()]
+        interceptors=[EncryptionInterceptor(), JWTValidationInterceptor()],
     )
 
-    add_CasesServicer_to_server(
-        CasesService(), server
-    )
-    add_RtEstimatesServicer_to_server(
-        RtEstimateService(), server
-    )
+    add_CasesServicer_to_server(CasesService(), server)
+    add_RtEstimatesServicer_to_server(RtEstimateService(), server)
     server.add_insecure_port("[::]:50051")
     logging.info("Starting gRPC server")
     server.start()

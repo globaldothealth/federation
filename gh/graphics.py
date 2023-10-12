@@ -1,3 +1,7 @@
+"""
+Functions for creating data visualizations
+"""
+
 from datetime import date
 import logging
 
@@ -7,6 +11,16 @@ from constants import RT_PARAMS
 
 
 def create_plot(data: list, location: str) -> str:
+    """
+    Create a plot for R(t) estimation
+
+    Args:
+        data (list): R(t) estimation data
+        location (str): Name of the location
+
+    Returns:
+        str: File name for generated plot
+    """
     file_name = f"{date.today()}_{location}.png"
     logging.debug(f"Creating plot: {file_name}")
     plt.style.use("seaborn-white")
@@ -25,7 +39,9 @@ def create_plot(data: list, location: str) -> str:
     ax.set_ylabel(f"R(t) with {confidence}%-CI")
     ax.set_ylim([0, 3])
     ax.axhline(y=1)
-    ax.set_title(f"Estimate of time-varying effective reproduction number for {location}")
+    ax.set_title(
+        f"Estimate of time-varying effective reproduction number for {location}"
+    )
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(file_name)

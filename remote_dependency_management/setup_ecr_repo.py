@@ -1,3 +1,7 @@
+"""
+Setup image repository for local development and testing
+"""
+
 import logging
 from time import sleep
 
@@ -21,35 +25,51 @@ VERSION_TAG_B = "0.2.0"
 DOCKER_CLIENT = docker.from_env()
 
 
-def wait_for_repo():
-	logging.info("Waiting for ECR repo")
-	ecr_client = boto3.client("ecr", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION)
-	counter = 0
-	while counter < 42:
-		try:
-			response = ecr_client.describe_repositories(registryId=REGISTRY_ID, repositoryNames=[REPO_NAME])
-			if response.get("repositories"):
-				return
-		except Exception:
-			logging.exception(f"An exception happened when trying to access {REPO_URI}, retrying")
-		counter += 1
-		sleep(5)
-	raise Exception("ECR repo not available")
+def wait_for_repo() -> None:
+    """
+    Wait for the image repository to be ready
+
+    Raises:
+        Exception: If the image repository is not available in the expected time
+    """
+    logging.info("Waiting for ECR repo")
+    ecr_client = boto3.client(
+        "ecr", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+    )
+    counter = 0
+    while counter < 42:
+        try:
+            response = ecr_client.describe_repositories(
+                registryId=REGISTRY_ID, repositoryNames=[REPO_NAME]
+            )
+            if response.get("repositories"):
+                return
+        except Exception:
+            logging.exception(
+                f"An exception happened when trying to access {REPO_URI}, retrying"
+            )
+        counter += 1
+        sleep(5)
+    raise Exception("ECR repo not available")
 
 
-def setup_repo():
-	logging.info(f"Pushing {IMAGE_NAME} with tag {VERSION_TAG_A} to repo {REPO_URI}")
-	image = DOCKER_CLIENT.images.build(path=IMAGE_PATH, tag=IMAGE_NAME)[0]
-	image.tag(REPO_URI, VERSION_TAG_A)
-	DOCKER_CLIENT.api.push(REPO_URI)
-	logging.info("Pushed image")
-	logging.info(f"Pushing {IMAGE_NAME} with tag {VERSION_TAG_B} to repo {REPO_URI}")
-	image.tag(REPO_URI, VERSION_TAG_B)
-	DOCKER_CLIENT.api.push(REPO_URI)
-	logging.info("Pushed image")
+def setup_repo() -> None:
+    """
+    Setup the local image repository
+    """
+
+    logging.info(f"Pushing {IMAGE_NAME} with tag {VERSION_TAG_A} to repo {REPO_URI}")
+    image = DOCKER_CLIENT.images.build(path=IMAGE_PATH, tag=IMAGE_NAME)[0]
+    image.tag(REPO_URI, VERSION_TAG_A)
+    DOCKER_CLIENT.api.push(REPO_URI)
+    logging.info("Pushed image")
+    logging.info(f"Pushing {IMAGE_NAME} with tag {VERSION_TAG_B} to repo {REPO_URI}")
+    image.tag(REPO_URI, VERSION_TAG_B)
+    DOCKER_CLIENT.api.push(REPO_URI)
+    logging.info("Pushed image")
 
 
 if __name__ == "__main__":
-	setup_logger()
-	wait_for_repo()
-	setup_repo()
+    setup_logger()
+    wait_for_repo()
+    setup_repo()
