@@ -261,6 +261,7 @@ async def serve_graphql(request: web_request.Request) -> web.Response:
             Returns:
                 list: R(t) estimates
             """
+
             return list(RtEstimateModel.objects.all())
 
     class Query(CaseQuery, RtEstimateQuery):
@@ -299,6 +300,7 @@ def run_graphql_server() -> None:
 
     app = web.Application()
     app.router.add_get(f"/{GRAPHQL_ENDPOINT}", serve_graphql)
+    app.router.add_get(f"/health", lambda _: web.Response(text="OK", status=200))
     web.run_app(app, port=GRAPHQL_PORT)
 
 

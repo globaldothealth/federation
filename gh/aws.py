@@ -24,12 +24,14 @@ def get_jwt() -> str:
     """
 
     logging.debug("Getting JWT")
-    cognito_client = boto3.client("cognito-idp", region_name=AWS_REGION)
+    cognito_client = None
     if LOCALSTACK_URL:
         logging.debug("Using localstack Cognito service")
         cognito_client = boto3.client(
             "cognito-idp", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
         )
+    else:
+        cognito_client = boto3.client("cognito-idp", region_name=AWS_REGION)
 
     response = cognito_client.list_user_pools(MaxResults=1)
     logging.debug(f"User pools: {response.get('UserPools')}")
@@ -52,12 +54,21 @@ def get_jwt() -> str:
 
 
 def get_certificate(domain_name: str) -> bytes:
+    """
+    Get the partner domain SSL/TLS certificate
+
+    Returns:
+        bytes: The certificate
+    """
+
     logging.info(f"Getting certificate from AWS for domain {domain_name}")
-    acm_client = boto3.client("acm", region_name=AWS_REGION)
+    acm_client = None
     if LOCALSTACK_URL:
         acm_client = boto3.client(
             "acm", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
         )
+    else:
+        acm_client = boto3.client("acm", region_name=AWS_REGION)
     response = acm_client.list_certificates()
     logging.debug(f"Response: {response}")
     certificates_list = response.get("CertificateSummaryList", [])
@@ -90,9 +101,11 @@ def store_data_in_s3(data: list, bucket_name: str, file_name: str) -> None:
 
     logging.info(f"Storing data in file {file_name} in bucket {bucket_name}")
     try:
-        s3 = boto3.client("s3")
+        s3 = None
         if LOCALSTACK_URL:
             s3 = boto3.client("s3", endpoint_url=LOCALSTACK_URL)
+        else:
+            s3 = boto3.client("s3")
         s3.put_object(Body=json.dumps(data), Bucket=bucket_name, Key=file_name)
     except Exception:
         logging.exception("An error occurred while trying to store data in S3")
@@ -112,9 +125,11 @@ def store_file_in_s3(bucket_name: str, folder: str, file_name: str) -> None:
 
     logging.info(f"Storing file {file_name} in bucket {bucket_name}")
     try:
-        s3 = boto3.client("s3")
+        s3 = None
         if LOCALSTACK_URL:
             s3 = boto3.client("s3", endpoint_url=LOCALSTACK_URL)
+        else:
+            s3 = boto3.client("s3")
         s3.upload_file(
             Filename=file_name, Bucket=bucket_name, Key=f"{folder}/{file_name}"
         )

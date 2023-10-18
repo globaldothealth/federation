@@ -16,7 +16,7 @@ import pytest
 import requests
 from requests.auth import HTTPBasicAuth
 
-from amqp_server import publish_message
+from amqp_server import publish_message, FLASK_PORT
 from aws import get_jwt, get_certificate
 from db import get_gh_db_data
 from constants import (
@@ -52,6 +52,8 @@ FAKE_MESSAGE = "This is a test message"
 FAKE_WORK_REQUEST = {"info": FAKE_MESSAGE}
 
 GH_WORK_REQUEST_URL = os.environ.get("GH_WORK_REQUEST_URL")
+
+GRPC_CLIENT = os.environ.get("GRPC_CLIENT")
 
 GRAPHQL_SERVER = os.environ.get("GRAPHQL_SERVER")
 GRAPHQL_SERVICE = f"http://{GRAPHQL_SERVER}:{GRAPHQL_PORT}/{GRAPHQL_ENDPOINT}"
@@ -516,3 +518,18 @@ def test_curator_data_not_public():
     assert not json.loads(response.text).get("cases")[0].get("verifiedBy")
 
     reset_database(collection_name)
+
+
+def test_healthchecks():
+    """
+    Healthcheck endpoints should work
+    """
+
+    urls = [
+        f"http://{GRPC_CLIENT}:{FLASK_PORT}/health",
+        f"http://{GRAPHQL_SERVER}:{GRAPHQL_PORT}/health",
+    ]
+
+    for url in urls:
+        response = requests.get(url=url)
+        assert response.status_code == 200
