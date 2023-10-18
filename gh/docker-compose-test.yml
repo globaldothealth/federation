@@ -71,6 +71,7 @@ services:
       AMQP_HOST: rabbitmq
       GRPC_A_HOST: fake_grpc_server
       GRPC_A_PORT: "${GRPC_A_PORT}"
+      GRPC_CLIENT: grpc_client
       GRAPHQL_SERVER: graphql_server
       GRAPHQL_PORT: "${GRAPHQL_PORT}"
       LOCALSTACK_URL: "${LOCALSTACK_URL}"

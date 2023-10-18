@@ -2,6 +2,7 @@
 G.h federated system server
 Receives and delegates requests for work, publishes messages about data
 """
+
 import logging
 import os
 
@@ -39,10 +40,6 @@ FLASK_HOST = os.environ.get("FLASK_HOST", "0.0.0.0")
 FLASK_PORT = os.environ.get("FLASK_PORT", 5000)
 FLASK_DEBUG = os.environ.get("FLASK_DEBUG", False)
 
-SECRETS_CLIENT = boto3.client(
-    "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
-)
-
 AUTO_APPROVE_ROLE = "senior"
 
 
@@ -54,6 +51,7 @@ def publish_message(message: str, pathogen_config: PathogenConfig) -> None:
         message (str): The message body for publication
         pathogen_config (PathogenConfig): The configuration for the pathogen, including exchange, routing, and queue
     """
+
     logging.debug(
         f"Publishing message to exchange {pathogen_config.topic_exchange} with routing key {pathogen_config.topic_route}"
     )
@@ -92,6 +90,7 @@ def should_auto_approve(curation_data: dict) -> bool:
     Returns:
         bool: True for auto-approval, False for manual approval
     """
+
     if any(AUTO_APPROVE_ROLE in role for role in curation_data.get("roles")):
         logging.debug("Auto-approving new data")
         return True
@@ -110,6 +109,7 @@ def add_curation_data(
         auto_approve (bool): Whether data should be automatically approved
         cleaned_data (list[dict]): The data, after cleaning and pre-processing
     """
+
     logging.debug("Adding curation data")
     name = curation_data.get("name", partner_name)
     data_to_add = {"createdBy": name}
@@ -235,8 +235,16 @@ def verify_password(username: str, password: str) -> bool:
     Returns:
         bool: True if correct, False otherwise
     """
+
+    secrets_client = None
+    if LOCALSTACK_URL:
+        secrets_client = boto3.client(
+            "secretsmanager", endpoint_url=LOCALSTACK_URL, region_name=AWS_REGION
+        )
+    else:
+        secrets_client = boto3.client("secretsmanager", region_name=AWS_REGION)
     # FIXME: brittle
-    response = SECRETS_CLIENT.get_secret_value(SecretId=f"{username}_api_key_password")
+    response = secrets_client.get_secret_value(SecretId=f"{username}_api_key_password")
     secret = response.get("SecretString", "")
     if secret == password:
         return True
@@ -251,6 +259,7 @@ def healthcheck() -> tuple[str, int]:
     Returns:
         tuple: "OK" + 200 HTTP status code
     """
+
     return "OK", 200
 
 
@@ -266,6 +275,7 @@ def request_work(pathogen_name: str, job_name: str) -> tuple[str, int]:
     Returns:
         tuple: Message + HTTP status code
     """
+
     if pathogen_name not in PATHOGENS:
         return f"Jobs for {pathogen_name} not available", 404
     if job_name not in PATHOGEN_JOBS:
